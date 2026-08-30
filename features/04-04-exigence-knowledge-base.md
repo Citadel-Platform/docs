@@ -95,16 +95,33 @@ Separate tab. Not an artifact — an operator/client tool.
       SharePoint through Microsoft Graph). Word, Excel and PowerPoint are read
       as well as text; PDF and the pre-2007 binary formats are refused by name.
       None of it is verified against a real Microsoft tenant yet.
-- [ ] The per-row indexing toggle adds and removes vectors and is reflected in retrieval
-- [ ] Re-fetching an unchanged source does not re-embed or re-charge
-- [ ] Chat retrieves with `@` scoping, cites sources, and is budget-metered
-- [ ] A LangGraph artifact retrieves from the Knowledge Base through the policy gate
-- [ ] In-project clients are isolated by mandatory collection prefix; a prefix-less query fails closed
+- [x] The per-row indexing toggle adds and removes vectors and is reflected in
+      retrieval — `an entry switched off loses its vectors on the next pass`,
+      and the API refuses to report an excluded entry as indexed.
+- [x] Re-fetching an unchanged source does not re-embed or re-charge — proven
+      twice: content that is fetched and found identical, and a source that
+      publishes digests, where the bytes never cross the wire at all.
+- [x] Chat retrieves with `@` scoping, cites sources, and is budget-metered —
+      including the three that decide whether it can be trusted: a mention that
+      names nothing says so rather than quietly searching everything, an answer
+      cites only passages it was given, and nothing retrieved means no model
+      call and no bill.
+- [x] A LangGraph artifact retrieves from the Knowledge Base through the policy
+      gate — and an artifact without read capability, or a tool the project's
+      policy does not list, never reaches the corpus.
+- [x] In-project clients are isolated by mandatory collection prefix; a
+      prefix-less query fails closed — including the adversarial case: one
+      client's id cannot be made to produce another's collection name.
 - [x] Expired consent raises "reauthorization required", never a silent stale
       corpus — a connector that cannot authenticate stops the pass with every
       entry left where it was, because "listed nothing" and "the folder is
       empty" are indistinguishable and one of them would prune the corpus.
       Proven for Graph's 401; the Console state is built, the Drive path is
       still the runner's, which needs no consent at all.
-- [ ] The runner ingests a synced Drive folder with no OAuth involved
-- [ ] Empty and not-configured states are truthful everywhere
+- [x] The runner ingests a synced Drive folder with no OAuth involved — and
+      since 30/08/26 the bytes survive it: the runner used to return file
+      content as a UTF-8 string, so a `.docx` in that folder was indexed as
+      replacement characters and reported as a successful read.
+- [~] Empty and not-configured states are truthful everywhere — built and
+      covered by widget tests on the pages that exist. Not audited page by page
+      against the whole Knowledge Base surface, so it is not ticked.
