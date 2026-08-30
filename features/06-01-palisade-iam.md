@@ -82,6 +82,16 @@ Deny-by-default throughout. Every evaluation is audited.
 - Detect authority/configuration drift between registry, runtime snapshot,
   runner/Devstation and provider configuration.
 
+**Drift, partly (30/08/26).** Task 6.1.5's last bullet asked for detection of
+authority and configuration drift. The Console now compares every artifact's
+pinned Access, Effect and Data Handling boundary revisions against what the
+project has published, on the Palisade Watchdog: behind, digest mismatch, or
+naming a boundary nothing has published. This is the case the pinning design
+creates — a boundary narrowed in the Console changes nothing for a deployed
+artifact until it is republished, and until now no screen said so. Still
+undetected: drift between the registry and deployed IAM, and between a
+runner's local configuration and what the project believes it is.
+
 ## Task 6.1.6 — Adversarial acceptance gates
 - Test forged/replayed provider webhooks, credential theft/revocation,
   cross-project identifiers, confused-deputy routes, oversized relay, path/URL

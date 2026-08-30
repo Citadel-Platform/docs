@@ -2221,3 +2221,7 @@ design exists to prevent.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 349 pass.
 - FOUND then RESOLVED — `auditedFlow`'s doc said a lost entry was surfaced where the runtime surfaces everything else. Nothing surfaced it: the write was swallowed entirely. It now takes a report hook, and a reporter that throws does not take the flow with it either.
 - NOT COVERED — no artifact declares `manifold.correlate`, so nothing has correlated a real report and the correlation source is the data-flow audit's only producer. Both are stated in the feature files rather than ticked.
+
+30/08/26 — boundary drift
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 355 pass.
+- NOT COVERED — drift between the registry and deployed IAM, and between a runner's local configuration and what the project believes it is. Both need a read the Console does not currently make.
