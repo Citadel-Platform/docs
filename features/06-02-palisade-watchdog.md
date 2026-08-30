@@ -71,7 +71,15 @@ forward rather than building a parallel mechanism inside Exigence.
       than an unasked question, and says when it was truncated.
 - [ ] Every client↔Citadel boundary crossing is inventoried
 - [ ] Undeclared boundary crossings are flagged
-- [ ] Unsafe configuration patterns are detected from project state alone
+- [~] Unsafe configuration patterns are detected from project state alone —
+      four checks built (`exigence/src/watchdog_configuration.ts`), each
+      reported by its consequence rather than a severity alone: a visual-mode
+      tool with no approval gate, a tool an artifact declares that the project
+      does not allow, an enabled artifact with no cap of its own, and a
+      capability nothing declares. **Not yet covered:** identities with no
+      expiry and secrets referenced but absent, both of which need a reader
+      this runtime does not hold; and policy drift against deployed IAM, which
+      belongs with the inventory observer rather than here.
 - [ ] External attacks, leak indicators and policy drift are detected on critical flows
 - [ ] Manifold and data-relay ingress/egress are visible without reading raw logs
 - [ ] Exigence KPI/SLO breaches alert through the existing ARM alerting channel
