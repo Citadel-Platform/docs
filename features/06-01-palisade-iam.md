@@ -101,5 +101,11 @@ Deny-by-default throughout. Every evaluation is audited.
 - [ ] Every authorization evaluation is audited
 - [ ] Deny-by-default holds when Palisade is unreachable — fail closed, never open
 - [ ] Baker, Manifold and data-relay permissions resolve and fail closed
-- [ ] Every cross-product data flow is attributable and visible in one audit view
+- [~] Every cross-product data flow is attributable and visible in one audit
+      view — the record is written to `palisade_data_flows` in the client's
+      own project, read back over a window through `/exigence/data-flows`, and
+      shown on the Palisade Watchdog beside the refusals. It is not yet
+      complete: the only producer is the correlation source, so a flow crossing
+      any other seam is still unrecorded, and no artifact declares the tool
+      that produces even that one.
 - [ ] Adversarial integration/E2E gates prevent external attack and cross-client leakage

@@ -2030,3 +2030,21 @@ and service-account impersonation were unavailable.
 - M citadel_core/platform/server/lib/src/platform_proxy_handler.dart
 - M citadel_platform/lib/src/app/platform_palisade_pages.dart
 - M citadel_platform/lib/src/app/platform_exigence_api.dart
+
+30/08/26 22:55 [FEAT] (`d6b7c23`, `b0b5f40` in citadel_core; `d653278` in citadel_platform) `claude-opus-5` The operator settled the open capability question: an artifact reading another Citadel product's record of a client's end users holds its own capability, named `exigence.usercontext.read`, with a `usercontext` tool scope. It is not `exigence.tools.read`, which is what searches the client's own documents — a handbook is the client's material, a session replay is personal data about somebody who never dealt with Citadel and cannot be asked, and one capability for both made "may search our documents, may not read our customers' sessions" a sentence a policy could not say. It does not hold for approval: a read has no effect to reverse, and its sensitivity is the Data Handling Boundary's question. Correlation then got the source it had been missing since the engine was written. It reads the client's own `armIssues` and `conduit_sessions` rather than calling back through the Platform API — the Console's ARM and Conduit routes authorise a person against console permissions an artifact does not hold, and routing an artifact's read through them would have meant inventing a delegation header and a new trust seam on the platform. There is no project to read across: the Firestore handed to the source is the client's, and a request naming another project is refused rather than answered from this one. Issues are selected on last sighting rather than first, because a bug recurring all week is still what this customer just hit. Every crossing goes through `auditedFlow`, which gained a report hook — the doc claimed a lost entry was surfaced somewhere and nothing surfaced it. That audit had no sink and no view: entries were validated and dropped. They now live in `palisade_data_flows` in the client's own project, beside the data they describe, and come back over a window through `/exigence/data-flows`, the proxy and the Palisade Watchdog, sharing `platform.watchdog.read` as declared deliberate sharing. A runtime with no audit store answers 404 rather than an empty list, on the standing rule that "nothing found" must never be reported on the strength of not having looked. **Still not reachable:** no artifact declares `manifold.correlate`, so the tool is bindable and unbound and 7.2.1's first definition-of-done box stays empty; the correlation source is also the audit's only producer, so 6.1.5's twelfth box is `[~]` rather than `[x]`. 808 Exigence unit + 129 emulator, 315 platform server, 48 Palisade authority, 30 Palisade boundary, 55 localbridge, 349 Console.
+- A citadel_core/exigence/src/correlation_source.ts
+- A citadel_core/exigence/src/correlation_tool.ts
+- A citadel_core/exigence/src/data_flow_audit_store.ts
+- A citadel_core/exigence/src/data_flow_audit.ts (generated from palisade/boundary)
+- A citadel_core/exigence/tool/sync_boundary.mjs
+- M citadel_core/palisade/authority/lib/src/permissions.dart
+- M citadel_core/palisade/boundary/src/data_flow_audit.ts
+- M citadel_core/exigence/src/private_platform_api.ts
+- M citadel_core/exigence/src/runtime_composition.ts
+- M citadel_core/exigence/src/reference_runtime_bootstrap.ts
+- M citadel_core/exigence/infra/modules/runtime/main.tf
+- M citadel_core/platform/server/lib/src/platform_proxy_handler.dart
+- M citadel_core/platform/server/lib/src/platform_proxy_models.dart
+- M citadel_core/platform/server/lib/src/platform_permission_map.dart
+- M citadel_platform/lib/src/app/platform_exigence_api.dart
+- M citadel_platform/lib/src/app/platform_palisade_pages.dart

@@ -2210,3 +2210,14 @@ design exists to prevent.
 - PASS `citadel_core/palisade/authority` `dart analyze && dart test` — 48 pass with `platform.watchdog.configure` added superdev-only and the catalogue regenerated.
 - PASS `citadel_core/platform/server` `dart analyze && dart test` — 315 pass; reading objectives shares the Watchdog's permission by declaration, setting them does not.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 347 pass.
+
+30/08/26 — `exigence.usercontext.read`, correlation's source, and the data-flow audit
+- PASS `citadel_core/exigence` `npm test` — 808 tests, 685 pass, 123 emulator-only skip, 0 fail.
+- PASS `citadel_core/exigence` `npm run test:firestore-emulator` — 129 tests, 129 pass.
+- PASS `citadel_core/palisade/authority` `dart analyze && dart test` — zero issues, 48 pass.
+- PASS `citadel_core/palisade/boundary` `npm test` — 30 tests, 30 pass.
+- PASS `citadel_core/localbridge` `npm test` — 55 tests, 55 pass.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — zero issues, 315 pass.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 349 pass.
+- FOUND then RESOLVED — `auditedFlow`'s doc said a lost entry was surfaced where the runtime surfaces everything else. Nothing surfaced it: the write was swallowed entirely. It now takes a report hook, and a reporter that throws does not take the flow with it either.
+- NOT COVERED — no artifact declares `manifold.correlate`, so nothing has correlated a real report and the correlation source is the data-flow audit's only producer. Both are stated in the feature files rather than ticked.
