@@ -73,15 +73,43 @@ Modelled on the GCP billing console:
 - Billing-account and payment-method configuration per client.
 
 ## Definition of done
-- [ ] No BigQuery resource is created
-- [ ] Metering accuracy is validated against one full month's real invoice before any client invoice is issued
-- [ ] An execution shows itemised cost by component summing to its total
-- [ ] Costs roll up correctly execution → artifact → project → month
-- [ ] Metered totals reconcile against the real invoice with a stored variance factor
-- [ ] The UI never presents a metered figure as invoice truth
+- [x] No BigQuery resource is created — nothing in the Exigence or provisioner
+      Terraform references BigQuery, and the deferral stands.
+- [ ] Metering accuracy is validated against one full month's real invoice
+      before any client invoice is issued — **not yet performed**, and
+      deliberately not fudgeable: `assertMonthIsReconciled` refuses to issue
+      from an unreconciled month in code, so this box gates itself. Method in
+      `_dev/docs/metering_accuracy_validation.md`.
+- [x] An execution shows itemised cost by component summing to its total —
+      and the total is the lines, so the two cannot disagree.
+- [x] Costs roll up correctly execution → artifact → project → month — the
+      month's summary rolls up the same executions it itemises.
+- [x] Metered totals reconcile against the real invoice with a stored variance
+      factor — including the direction: metering reads high, so a factor below
+      1.0 is the expected result rather than a fault. What has not happened is
+      the reconciliation itself, against a real month; see above.
+- [x] The UI never presents a metered figure as invoice truth — a metered
+      figure says it is not a bill without being asked, and a reconciled one
+      still says it is an estimate.
 - [ ] Cloud Run spend cross-checks against the `client` label in billing data
-- [ ] Budgets alert and hard-stop at threshold
-- [ ] An invoice issues, is paid through Stripe, and status returns to Citadel
-- [ ] Duplicate Stripe webhook delivery does not double-record a payment
-- [ ] Issued invoices are immutable; corrections are credit notes
-- [ ] No cost figure is ever fabricated — missing data shows as missing
+      — the services carry the label and infrastructure cost is metered per
+      component, but nothing reads Google's billing export to compare. Part of
+      the same unperformed validation above.
+- [x] Budgets alert and hard-stop at threshold — one crossing is one message
+      rather than one per threshold passed, a threshold beneath the announced
+      one never fires late, and the reservation stops the spend rather than
+      reporting it.
+- [~] An invoice issues, is paid through Stripe, and status returns to
+      Citadel — built and covered end to end over a stubbed Stripe, including
+      the webhook signature, staleness and short-payment cases. Not yet run
+      against a real Stripe account.
+- [x] Duplicate Stripe webhook delivery does not double-record a payment — a
+      repeated notification is not an error, and the invoice is marked paid
+      once however it comes back.
+- [x] Issued invoices are immutable; corrections are credit notes — issuing
+      twice is refused rather than quietly re-dated, and a credit note cannot
+      take an invoice below nothing.
+- [x] No cost figure is ever fabricated — an unpriced component fails closed
+      rather than costing nothing, a run missing a meter this deployment
+      records is reported as partly measured, and a component a run simply did
+      not use is not reported as a missing meter.
