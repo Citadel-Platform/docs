@@ -89,12 +89,22 @@ Separate tab. Not an artifact — an operator/client tool.
   output, spilling to GCS above the 128 KiB inline limit.
 
 ## Definition of done
-- [ ] A Drive folder, a OneDrive folder, an uploaded folder and a live URL all ingest and index
+- [~] A Drive folder, a OneDrive folder, an uploaded folder and a live URL all
+      ingest and index — four connectors exist and are tested (a synced Drive
+      folder through the runner, direct upload, live URLs, and OneDrive or
+      SharePoint through Microsoft Graph). Word, Excel and PowerPoint are read
+      as well as text; PDF and the pre-2007 binary formats are refused by name.
+      None of it is verified against a real Microsoft tenant yet.
 - [ ] The per-row indexing toggle adds and removes vectors and is reflected in retrieval
 - [ ] Re-fetching an unchanged source does not re-embed or re-charge
 - [ ] Chat retrieves with `@` scoping, cites sources, and is budget-metered
 - [ ] A LangGraph artifact retrieves from the Knowledge Base through the policy gate
 - [ ] In-project clients are isolated by mandatory collection prefix; a prefix-less query fails closed
-- [ ] Expired Drive consent renders as "reauthorization required", never as a silent stale corpus
+- [x] Expired consent raises "reauthorization required", never a silent stale
+      corpus — a connector that cannot authenticate stops the pass with every
+      entry left where it was, because "listed nothing" and "the folder is
+      empty" are indistinguishable and one of them would prune the corpus.
+      Proven for Graph's 401; the Console state is built, the Drive path is
+      still the runner's, which needs no consent at all.
 - [ ] The runner ingests a synced Drive folder with no OAuth involved
 - [ ] Empty and not-configured states are truthful everywhere

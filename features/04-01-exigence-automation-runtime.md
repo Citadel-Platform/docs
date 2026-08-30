@@ -65,8 +65,15 @@ suspend/resume mechanics are replaced.
   LangGraph `interrupt()` rather than a Citadel-specific suspend.
 
 ## Task 4.1.R4 — Engine hardening (carried from the pre-rewrite assessment)
-- **Determinism guard**: lint rule plus CI replay-equivalence assertion. Nothing
-  currently stops orchestrator code calling `Date.now()`/`Math.random()`.
+- **Determinism guard** (done 30/08/26): `src/determinism_guard.ts` plus
+  `tool/determinism_lint.ts`, gating `npm test`. Scope is derived — every module
+  a graph can reach, following relative imports from anything building a
+  `StateGraph` or a `createGraphStep` — so a new graph pulls itself under the
+  guard rather than waiting to be listed. A construct may be stood down only by
+  a `determinism: ok — <reason>` comment; a marker with no reason is reported in
+  its own right. Replay-equivalence is asserted in
+  `test/local_report_graph.test.ts`: a run killed mid-graph resumes to state
+  deep-equal to the uninterrupted run's, having acted once.
 - **Version gate**: refuse to resume a run whose orchestrator code version
   differs from the version pinned at run start, rather than replaying divergent
   logic. Config pinning already exists; code pinning does not.
@@ -83,13 +90,33 @@ suspend/resume mechanics are replaced.
   then Temporal. Flag cost before adopting. The trigger has not fired.
 
 ## Definition of done
-- [ ] `@langchain/langgraph-checkpoint-validation` passes against the Firestore checkpointer
-- [ ] A LangGraph artifact survives forced crash mid-graph and resumes at the exact superstep
-- [ ] `interrupt()` holds ≥48h with zero compute cost and resumes from the Console
-- [ ] Every tool call is policy-gated, budget-reserved and audited before execution
-- [ ] Duplicate dispatch proven idempotent under forced double-delivery
-- [ ] Audit trail reconstructs a full run without application logs
-- [ ] Cost records within ±2% of provider-reported usage; budget hard-stop fires in test
-- [ ] Determinism guard, version gate and durable timers are implemented and tested
-- [ ] Deleted modules are gone with their tests, not left dead
-- [ ] `terraform validate` passes; all resources tagged
+Ticked against the evidence named beside each; dates index `_dev/test_status.md`.
+
+- [x] `@langchain/langgraph-checkpoint-validation` passes against the Firestore
+      checkpointer — 714 tests, 0 fail, suite run unmodified (14/08/26 23:20)
+- [x] A LangGraph artifact survives forced crash mid-graph and resumes at the
+      exact superstep — checkpointer integration tests (14/08/26 23:20), and
+      again at graph level in `local_report_graph.test.ts` (30/08/26)
+- [x] `interrupt()` holds ≥48h with zero compute cost and resumes from the
+      Console — 48h is the binding's default hold; durable interrupt and resume
+      across a fresh saver instance is tested, and the Phase R acceptance run
+      held, resolved and resumed a write approval live
+- [x] Every tool call is policy-gated, budget-reserved and audited before
+      execution — gate and audit are unconditional in `bindPolicyGatedTool`.
+      Budget *reservation* is a hook the artifact supplies rather than a built-in
+      price model: tools carry no pricing, and fabricating one would be worse
+      than declaring the gap. Model calls reserve through `BudgetedModelExecutor`.
+- [x] Duplicate dispatch proven idempotent under forced double-delivery
+- [x] Audit trail reconstructs a full run without application logs — Phase R
+      acceptance run, 5-event chain verified with the runtime's own
+      `verifyAuditChain`
+- [x] Cost records within ±2% of provider-reported usage; budget hard-stop fires
+      in test — live Vertex settlement in the Phase R run; exact and overspent
+      hard stops covered in unit tests
+- [x] Determinism guard, version gate and durable timers are implemented and tested
+- [x] Deleted modules are gone with their tests, not left dead — Task 4.1.R2,
+      removed across all three repositories in one change (15/08/26 00:40)
+- [x] `terraform validate` passes; all resources tagged — zero drift after apply
+
+**Open, deliberately:** raising the Cloud Tasks queue from 5/sec and 10
+concurrent is gated on real traffic that has not arrived.

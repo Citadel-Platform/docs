@@ -2154,3 +2154,31 @@ design exists to prevent.
 - NOT RUN: any call to Meta. The Graph endpoint and its fields are taken from
   Meta's published documentation; the verifier has never been run against the
   real API, and the first live channel is what proves it.
+
+30/08/26 — Feature 4.1 Task 4.1.R4 determinism guard
+- PASS `cd citadel_core/exigence && npm test` — 726 tests, 609 pass, 117 emulator-only skip, 0 fail. `npm test` now runs the determinism lint first and fails on a finding, so the guard is a gate rather than a report.
+- PASS `npm run lint:determinism` — 29 replay-reachable modules, nothing found.
+- FOUND then RESOLVED — the guard's first run reported 5 constructs. One was a real defect: `local_report_graph.ts` stamped the row it appends to the client's workbook with `args.clock?.now() ?? new Date().toISOString()`, so a replayed node would write a different time into a cell somebody reads than the checkpoint the run continues from was written with. Fixed by making `clock` required on `LocalReportGraphArgs` (production already injected one; only the test fixture had to change). The other four are elapsed-time bounds and a between-superstep dispatcher, each now standing down under a `determinism: ok — <reason>` comment naming a reason a reader can check.
+- PASS new replay-equivalence assertion in `test/local_report_graph.test.ts` — a run killed mid-graph and resumed produces state deep-equal to the uninterrupted run's, with each client-machine effect sent exactly once and the same row stamped.
+- PASS 12 new `determinism_guard` tests, including the two that matter for decay: scope is derived from imports so a new graph pulls itself in without being listed, and a suppression carrying no reason is reported in its own right rather than honoured.
+
+30/08/26 — Feature 4.2 Task 4.2.1 project run list, 4.2.3 irreversible approvals
+- PASS `citadel_core/exigence` `npm test` — 728 tests, 611 pass, 117 emulator-only skip, 0 fail.
+- PASS `citadel_core/palisade/authority` `dart analyze && dart test` — 48 pass after adding `exigence.runs.list` and regenerating the exported catalogue.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — 311 pass, including two new proxy operations and a guard test proving an artifact run list answering with another artifact's runs is refused as a 502.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 333 pass, including the run list and the irreversible-approval label.
+- FOUND — the Console's `listArtifactRuns` had no proxy route at all: `GET /exigence/automations/{id}/runs` was never routed, so the artifact page's runs table could only ever have 404'd. Routed as part of this work.
+
+30/08/26 — Feature 4.3 Tasks 4.3.1, 4.3.2 (per-run view), 4.3.4
+- PASS `citadel_core/exigence` `npm test` — 754 tests, 634 pass, 120 emulator-only skip, 0 fail.
+- PASS `npm run test:firestore-emulator` — 122 integrations pass, including three new trace-store ones: a replayed superstep writes over its own span rather than adding a second, another project's spans are not this project's trace, and attributes survive the round trip.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — 311 pass with the spans route and its coordinate guard.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 335 pass, including the trace panel and the "no trace for this run" state that is not presented as a failure.
+
+30/08/26 — Feature 4.4 Office extraction and Microsoft Graph, Feature 4.3.1 OTLP mirror
+- PASS `citadel_core/exigence` `npm test` — 774 tests, 654 pass, 120 emulator-only skip, 0 fail.
+- PASS `citadel_core/exigence` `npm run test:firestore-emulator` — 122 integrations pass.
+- PASS `citadel_core/localbridge` `npm test` — 55 pass, including a file whose bytes are not text surviving the round trip byte for byte.
+- FOUND then RESOLVED — the runner returned file content as a UTF-8 string, so every non-text document the folder connector fetched arrived as replacement characters with a digest that no longer described it. A `.docx` in a synced Drive folder would have been indexed as rubbish and reported as a successful read. Fixed on both sides in one change: the runner declares `contentEncoding`, the connector decodes accordingly and refuses content labelled base64 that is not.
+- FOUND then RESOLVED — no `invoke_agent` span was emitted anywhere in production code, though every model and tool span names one as its parent. Any OTel backend would have received a set of orphans. The projection recorder now writes it when a run succeeds or fails; the span id is derived from the run, so a resumed run writes the same span rather than a second one.
+- PASS new suites: 8 `office_extraction` (fixtures are real ZIP archives written by Python's `zipfile`, not by the reader under test), 4 `trace_otlp`, 4 Graph connector tests including a paging link off `graph.microsoft.com` refused before the token could follow it.

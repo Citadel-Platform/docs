@@ -41,8 +41,39 @@ The LLM-observability category is consolidating into platforms; portability via 
 - Pre/post step hooks: PII pattern screening on outbound payloads, output-schema validation, configurable blocked-action rules; violations create AuditEvents and can force approval escalation instead of hard failure.
 
 ## Definition of done
-- [ ] Every demo-run span validates against the GenAI semconv field map (documented table in _dev/docs)
-- [ ] Trace ↔ journal ↔ audit cross-links navigable in Console both directions
-- [ ] Eval run produces stored, versioned scores; regression gate blocks a deliberately degraded prompt in test
-- [ ] OTLP mirror verified against one external OTel backend (operator test project)
-- [ ] No client evidence data leaves the client project by default; mirror is per-project opt-in config
+- [x] Every demo-run span validates against the GenAI semconv field map
+      (documented table in `_dev/docs/otel_genai_field_map.md`) — the map came
+      first (15/08/26) and `src/trace_span.ts` emits against it (30/08/26),
+      with tests that fail if `gen_ai.system` returns or if money appears under
+      a `gen_ai.*` key.
+- [x] Trace ↔ journal ↔ audit cross-links navigable in Console both directions
+      — a trace row links to the audit event that authorised it, and the audit
+      page names the event a trace sent the operator to read.
+- [ ] Eval run produces stored, versioned scores; regression gate blocks a
+      deliberately degraded prompt in test — **structurally blocked** (Task
+      4.3.3): datasets seed from real consented runs, of which there are zero.
+- [~] OTLP mirror — the exporter is written and tested (`src/trace_otlp.ts`):
+      stored spans go out as OTLP/HTTP JSON, batched, per-project opt-in, with
+      no endpoint by default. It is a copy and cannot fail a run; a collector
+      that is down costs a counted dropped batch. **Not yet verified against a
+      real external backend**, which is what the tick waits on — and what a
+      test against a fake collector cannot stand in for.
+- [x] No client evidence data leaves the client project by default; mirror is
+      per-project opt-in config — spans are stored in the client's own
+      Firestore beside the journal, and there is no exporter to leave by.
+
+**Also fixed here:** every model and tool span named a parent `invoke_agent`
+span that nothing emitted, so a trace arrived at any backend as a set of
+orphans pointing at an id resolving to nothing. `GraphProjectionRecorder` now
+writes the run span when a run succeeds or fails — after the journal
+transition, never instead of it.
+
+**Also delivered:** Task 4.3.4 guardrails, in `src/guardrails.ts` — pattern
+screening on outbound payloads, output-shape checking against the tool's own
+declared schema, and configurable blocked actions. A violation escalates to a
+person and writes an audit event rather than failing the run, and a finding
+never carries the value it found.
+
+**Open:** Task 4.3.2's aggregates (p50/p95 latency, failure rate by tool, cost
+per successful outcome, approval-cycle time) need runs to aggregate over. The
+per-run trace view is built; the cross-run statistics are not.

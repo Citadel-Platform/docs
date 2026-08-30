@@ -61,9 +61,24 @@ disable, run, cancel, approvals list/resolve, budget set are implemented and
 authenticated by Google OIDC.
 
 ## Definition of done
-- [ ] Full lifecycle drivable from the Console: trigger → watch nodes live → approve → inspect audit → see cost
-- [ ] Role scoping enforced (viewer read-only, developer no budget edits, admin full)
-- [ ] Cancelled template surface is deleted, not merely hidden
-- [ ] Retained dialogs are wired to a runtime that actually serves them
-- [ ] `flutter analyze` zero warnings; widget tests for run detail and approvals inbox
-- [ ] All new copy is production-visible, no dev-facing meta commentary
+- [x] Full lifecycle drivable from the Console: trigger → watch nodes live →
+      approve → inspect audit → see cost. Proven live in the Phase R acceptance
+      run; the Executions page now opens on the project's runs rather than
+      requiring an identifier (30/08/26).
+- [x] Role scoping enforced (viewer read-only, developer no budget edits, admin
+      full) — proved against production code by the permission-map equivalence
+      test, which enumerates every operation against every role combination.
+- [x] Cancelled template surface is deleted, not merely hidden — the runtime
+      routes, the proxy operations and the Console dialogs went in one change
+      (15/08/26); the dead Configuration nav item that still matched
+      `/exigence/configuration` was removed 30/08/26.
+- [x] Retained dialogs are wired to a runtime that actually serves them.
+      Verified live: all six surviving operational routes answer 200. This is
+      also where a gap was found — the Console's artifact runs table called a
+      `GET` that had never been proxied, so it could only ever have 404'd.
+- [x] `flutter analyze` zero warnings; widget tests for run detail and
+      approvals inbox — 333 tests pass.
+- [x] All new copy is production-visible, no dev-facing meta commentary.
+
+**Open, deliberately:** the run detail's cross-link to a trace waits on Feature
+4.3, which owns tracing.
