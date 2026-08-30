@@ -59,10 +59,10 @@ forward rather than building a parallel mechanism inside Exigence.
       artifact — built for what the gate and the guardrails write: refusals,
       holds, escalations and blocks, over a window, grouped both ways
       (`exigence/src/watchdog_authorization.ts`, `platform.watchdog.read`,
-      Palisade → Watchdog). **Runner boundary refusals are not in it yet**:
-      those come back as evidence on the intent rather than as an audit event,
-      so there is nothing for this to read. That is the next slice, and it is
-      a gap in the source, not in the aggregation.
+      Palisade → Watchdog), including runner boundary refusals: a tool binding
+      names the refusal in its own result and the graph step recognises the
+      runner's evidence envelope, so a path refused on the client's machine is
+      an audit event rather than a value buried in one activity's payload.
 - [x] An agent exceeding its authority is visible without reading raw logs —
       the page ranks by breadth rather than volume, since an artifact denied
       one tool forty times is a configuration nobody finished and an artifact

@@ -2189,3 +2189,8 @@ design exists to prevent.
 - PASS `citadel_core/platform/server` `dart analyze && dart test` — 311 pass, including the new proxy operation and its project-match guard.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 341 pass, including the two empty states that must not be confused (a quiet week versus a window with nothing in it) and the truncated report's floor.
 - FOUND then RESOLVED — the Console could not register a OneDrive source at all: the runtime read Graph, the dialog offered three kinds and none of them was it, and no field existed for the Secret Manager reference the connector needs.
+
+30/08/26 — Feature 6.2 Task 6.2.1, second slice: refusals on the client's machine
+- PASS `citadel_core/exigence` `npm test` — 782 tests, 662 pass, 120 emulator-only skip, 0 fail.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 342 pass.
+- FOUND then RESOLVED — the runner's own boundary refusals reached no audit event at all. The runner refuses on the client's machine and answers with evidence rather than an error, so the refusal sat inside one activity's payload and no cross-run view could see it. Now audited on the invocation digest, so a replayed node writes it once, and counted with the gate's denials.
