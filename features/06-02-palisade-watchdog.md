@@ -83,7 +83,20 @@ forward rather than building a parallel mechanism inside Exigence.
       expiry and secrets referenced but absent, both of which need a reader
       this runtime does not hold; and policy drift against deployed IAM, which
       belongs with the inventory observer rather than here.
-- [ ] External attacks, leak indicators and policy drift are detected on critical flows
+- [~] External attacks, leak indicators and policy drift are detected on
+      critical flows — forged and replayed ingress is now counted where before
+      it existed only as a log line: the WhatsApp endpoint names a kind for
+      every refusal and the runtime counts them into hourly buckets per
+      channel and kind (`exigence/src/ingress_refusals.ts`), read over a
+      window through `/exigence/watchdog/ingress` and the proxy. Bucketed
+      because the writer is public: one document per request would let anybody
+      with the URL run up a client's Firestore bill, so each instance stops at
+      a ceiling and the report says its count is a floor. Boundary drift
+      against published revisions is detected in the Console (Feature 6.1).
+      **Not covered:** abnormal relay volume and destinations, undeclared
+      egress, and cross-project identifiers. **Not yet rendered:** the Console
+      has the client and provider for ingress refusals and no section showing
+      them.
 - [ ] Manifold and data-relay ingress/egress are visible without reading raw logs
 - [~] Exigence KPI/SLO breaches alert through the existing ARM alerting channel
       — the measurement is built (`exigence/src/service_objectives.ts`):

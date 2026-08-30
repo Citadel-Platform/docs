@@ -2225,3 +2225,9 @@ design exists to prevent.
 30/08/26 — boundary drift
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 355 pass.
 - NOT COVERED — drift between the registry and deployed IAM, and between a runner's local configuration and what the project believes it is. Both need a read the Console does not currently make.
+
+31/08/26 — ingress refusal counting
+- PASS `citadel_core/exigence` `npm test` — 815 tests, 692 pass, 123 emulator-only skip, 0 fail.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — zero issues, 315 pass.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 355 pass.
+- NOT COVERED — the Firestore ingress store's bucketing is exercised only through the memory store; no emulator test writes an increment. The Console renders nothing from it yet.

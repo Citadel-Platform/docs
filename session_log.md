@@ -2054,3 +2054,13 @@ and service-account impersonation were unavailable.
 - A citadel_platform/test/platform_boundary_drift_test.dart
 - M citadel_platform/lib/src/app/platform_exigence_api.dart
 - M citadel_platform/lib/src/app/platform_palisade_pages.dart
+
+31/08/26 00:20 [FEAT] (`aa9666e` in citadel_core; `4c17fb1` in citadel_platform) `claude-opus-5` Task 6.2.4's first half: forged and replayed ingress. The evidence did not exist — the WhatsApp endpoint is the one surface an unauthenticated stranger can reach, and every refusal went to an optional logger and nowhere else, so a thousand forged signatures and none looked identical from every oversight surface in the product. Refusals now carry a kind separate from their sentence (a count grouped by a human-readable reason splits the moment somebody improves the wording) and are counted into hourly buckets per channel and kind in the client's own project. Counted, never copied: the request was refused precisely because it could not be trusted, and storing it would put an attacker's payload in the client's data plane. Bucketed rather than one document per request, because the writer is public and one document per request is a way for anybody with the URL to spend a client's money; each instance stops writing to a bucket at a ceiling and the report says its count is a floor, because "eleven forged deliveries" is a misconfigured integration and "at least a thousand" is somebody trying things. Recording never fails the endpoint — a 500 there would have Meta redeliver the forged request that was just rejected. Route, permission (shared with the rest of the Watchdog, declared deliberate) and Console client are in; **the Console section that renders them is not built yet.**
+- A citadel_core/exigence/src/ingress_refusals.ts
+- M citadel_core/exigence/src/whatsapp_webhook_endpoint.ts
+- M citadel_core/exigence/src/private_platform_api.ts
+- M citadel_core/exigence/src/runtime_composition.ts
+- M citadel_core/exigence/src/reference_runtime_bootstrap.ts
+- M citadel_core/exigence/infra/modules/runtime/main.tf
+- M citadel_core/platform/server/lib/src/platform_proxy_handler.dart
+- M citadel_platform/lib/src/app/platform_exigence_api.dart
