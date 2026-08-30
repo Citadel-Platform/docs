@@ -60,7 +60,9 @@ The LLM-observability category is consolidating into platforms; portability via 
       test against a fake collector cannot stand in for.
 - [x] No client evidence data leaves the client project by default; mirror is
       per-project opt-in config — spans are stored in the client's own
-      Firestore beside the journal, and there is no exporter to leave by.
+      Firestore beside the journal. The exporter added since changes nothing
+      here: it has no default endpoint and no fallback collector, so a project
+      that configures none exports nothing.
 
 **Also fixed here:** every model and tool span named a parent `invoke_agent`
 span that nothing emitted, so a trace arrived at any backend as a set of
