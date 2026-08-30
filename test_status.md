@@ -2199,3 +2199,8 @@ design exists to prevent.
 - PASS `citadel_core/exigence` `npm test` — 787 tests, 667 pass, 120 emulator-only skip, 0 fail.
 - PASS `citadel_core/platform/server` `dart analyze && dart test` — 311 pass; the "no two operations share a permission by accident" invariant made the Watchdog's two views declare their sharing rather than acquire it.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 344 pass, including a finding rendered with its consequence and the empty state that distinguishes "nothing to change" from "nothing published".
+
+30/08/26 — Feature 6.2 Task 6.2.1, platform-side anomalies
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — 315 pass, including four new route tests: the artifact ranked above the person, the registry rather than the id deciding which is which, the permission gate, and an unconfigured detector answering 503 rather than a clean report.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 345 pass.
+- FOUND then RESOLVED — `detectAuthorityAnomalies` had unit tests and no caller at all: no route, no page. The detector for the feature's primary safety signal had never produced an answer anybody could see.

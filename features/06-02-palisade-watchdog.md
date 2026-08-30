@@ -64,6 +64,9 @@ forward rather than building a parallel mechanism inside Exigence.
       runner's evidence envelope, so a path refused on the client's machine is
       an audit event rather than a value buried in one activity's payload.
 - [x] An agent exceeding its authority is visible without reading raw logs —
+      from both records: what its tool calls ran into inside a run, and what
+      its identity ran into asking the Platform API (`detectAuthorityAnomalies`
+      existed with tests and no route; it now has one, and a page). —
       the page ranks by breadth rather than volume, since an artifact denied
       one tool forty times is a configuration nobody finished and an artifact
       denied four different tools is one reaching for authority it never had.
