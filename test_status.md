@@ -2204,3 +2204,9 @@ design exists to prevent.
 - PASS `citadel_core/platform/server` `dart analyze && dart test` — 315 pass, including four new route tests: the artifact ranked above the person, the registry rather than the id deciding which is which, the permission gate, and an unconfigured detector answering 503 rather than a clean report.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 345 pass.
 - FOUND then RESOLVED — `detectAuthorityAnomalies` had unit tests and no caller at all: no route, no page. The detector for the feature's primary safety signal had never produced an answer anybody could see.
+
+30/08/26 — Feature 6.2 Task 6.2.5 service objectives
+- PASS `citadel_core/exigence` `npm test` — 794 tests, 674 pass, 120 emulator-only skip, 0 fail, including the three that decide whether anybody keeps the alerts on: no data is not a pass, the sample travels with the rate, and a pending approval counts at the age it has reached.
+- PASS `citadel_core/palisade/authority` `dart analyze && dart test` — 48 pass with `platform.watchdog.configure` added superdev-only and the catalogue regenerated.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — 315 pass; reading objectives shares the Watchdog's permission by declaration, setting them does not.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 347 pass.

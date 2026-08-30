@@ -85,6 +85,14 @@ forward rather than building a parallel mechanism inside Exigence.
       belongs with the inventory observer rather than here.
 - [ ] External attacks, leak indicators and policy drift are detected on critical flows
 - [ ] Manifold and data-relay ingress/egress are visible without reading raw logs
-- [ ] Exigence KPI/SLO breaches alert through the existing ARM alerting channel
+- [~] Exigence KPI/SLO breaches alert through the existing ARM alerting channel
+      — the measurement is built (`exigence/src/service_objectives.ts`):
+      success rate, run latency p95, approval-cycle p95 and budget burn, each
+      against a target the project sets and none against a default, evaluated
+      per window and shown on the Watchdog. **Delivery is not**, and cannot be
+      as the feature file assumes: ARM's alerting is a Console view over its
+      own issues and cases, with no ingest another product could post to. Three
+      shapes and the reason today is the Console only are recorded in
+      `DECISIONS_NEEDED.md` (30/08/26).
 - [ ] No alerting mechanism is duplicated from ARM
 - [ ] Deferred scope is recorded, not silently dropped
