@@ -3,6 +3,14 @@
 ## Status
 Active. First deliverable — nothing else can be built without this.
 
+**Amended 30/08/26 and 31/08/26.** The review settled that Conduit is
+Flutter-first with a Dart ingest pipeline; the JavaScript SDK and BigQuery
+items below are deferred, not outstanding. **Multiple capture targets per
+project are built (31/08/26)**: a project context carries additional targets,
+each with its own key, kind, enabled flag and full capture configuration, and
+ingest resolves what applies from the key that was actually sent. A disabled
+target is refused rather than accepted and dropped.
+
 ## Scope
 Build and publish the Conduit client-side JavaScript SDK that instruments any website with a single script tag. This SDK is the sole data source for all subsequent Conduit modules.
 
@@ -85,13 +93,102 @@ Build and publish the Conduit client-side JavaScript SDK that instruments any we
 - Publish to GTM Template Gallery or provide as a downloadable JSON for manual import.
 - Document GTM deployment path in Citadel onboarding docs.
 
-## Definition of done
-- [ ] SDK builds to < 20 KB gzipped UMD and ESM targets
-- [ ] All autocapture event types are emitted and verifiable in browser devtools
-- [ ] Rage click, dead click, and scroll depth events are correctly fired
-- [ ] Core Web Vitals and error events are captured on a test page
-- [ ] Custom event API functions work before and after SDK init
-- [ ] PII masking is verified: no raw input content in captured payloads
-- [ ] Transmission batching and sendBeacon fallback work correctly
-- [ ] GTM template imports and fires events without code changes
+## Status note — 30/08/26
 
+**These definition-of-done items describe an architecture Conduit was not
+built on, and that divergence has never been recorded.** They assume a
+JavaScript web SDK shipped as UMD and ESM bundles with a Google Tag Manager
+template, a BigQuery streaming pipeline, Pub/Sub routing and GCS replay
+chunks. What exists is a **Flutter/Dart SDK** (`conduit/citadel_conduit_sdk`)
+and a **Dart ingest service persisting to Firestore**
+(`conduit/citadel_conduit_ingest`), with the Console reading it directly.
+
+Both halves are real and tested — the ingest service alone carries 100 tests
+covering validation, analytics, funnels, journeys, alerting, experience
+monitoring, voice of customer and session search, and the Console has pages
+for all of it. So this is not unbuilt work; it is work whose acceptance
+criteria were written against a plan that changed.
+
+**Answered 30/08/26** by the product-owner feature-set review
+(`_dev/docs/feature_set_review_30_08_26.md`): Conduit stays Flutter/Dart-heavy
+with JS embedded only where unavoidable, collects telemetry and metrics first,
+and defers analytics infrastructure. So the boxes below are **deferred, not
+outstanding**, and Features 3.1–3.9 need their acceptance criteria rewritten
+against the product that exists — a Flutter SDK and a Dart ingest service on
+Firestore — rather than the web SDK and BigQuery pipeline they were written
+for.
+
+## Definition of done
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] Events tracked before `init` are replayed once it completes, so an app
+      that instruments early does not silently lose its first page
+      (`conduit_sdk_test.dart`)
+- [x] Collection is blocked until consent in gated mode, and explicit feedback
+      is still submittable before consent — the one thing a person chose to
+      send
+- [x] Rage clicks and scroll-depth thresholds fire, each threshold once per
+      pageview
+- [x] Performance and JavaScript diagnostics are captured as events
+- [x] Masked and digit-heavy text is sanitised before it leaves the device, so
+      no raw input content reaches a payload
+- [x] Batched dispatch, with keepalive on `pagehide` — the Flutter equivalent
+      of the `sendBeacon` fallback
+- [x] Conduit's own ingest traffic is ignored by API capture, so the SDK does
+      not observe itself
+- [ ] Dead clicks. Rage clicks and scroll depth are in; a click that hits
+      nothing is not detected, and it is the frustration signal the Heatmaps
+      overlay (3.4) has nothing to draw
+- [ ] Driven in a real app rather than in widget tests — the one thing no test
+      here reaches
+
+### Deferred — the web pipeline
+Not outstanding. A JavaScript bundle and a Tag Manager template are a second
+implementation for a different surface, and the 30/08/26 review put Conduit on
+Flutter/Dart with JS embedded only where unavoidable.
+
+- SDK builds to < 20 KB gzipped UMD and ESM targets
+- Autocapture verifiable in browser devtools
+- Core Web Vitals on a test page
+- GTM template imports and fires events without code changes
+
+
+## Task 3.1.6 — Touchpoints and multiple targets (NEW 30/08/26)
+
+From the feature-set review. The Console page is applied, and multiple targets
+was built on 31/08/26; what remains is the refusal on an unknown key.
+
+**Touchpoints** replaces Instrumentation, at `/conduit/touchpoints` (the old
+path redirects). The old page was a two-column reference card describing what
+the SDK captures — accurate and impossible to act on. The question an operator
+arrives with is "is replay on for the customer portal, and off for the internal
+admin tool", which is a configuration question, so it is now a configuration
+screen: toggles for session replay, heatmaps, synthetic probes and the feedback
+widget, writing through the same `conduit_projects` document the ingest service
+reads, with sampling, consent, retention, masking and API-error rules shown
+beside them.
+
+**Multiple targets** (built 31/08/26). A project may have several apps,
+websites and sources, each with its own capture configuration; the Conduit
+document now carries a `targets` list and the Console creates, renames and
+removes them. What is still missing is the other half of the same idea — the
+ingest service does not check the target a capture names, so an unknown key is
+attributed to the project rather than refused.
+
+- [x] Touchpoints renders the project's real capture configuration as toggles
+      that write
+- [x] A project holds several named targets, each with its own configuration
+      (31/08/26) — `targets` on the Conduit document, one entry per capture
+      source
+- [x] Adding, renaming and removing a target from the Console (31/08/26)
+- [ ] A capture arriving under an unknown project key is refused, not silently
+      attributed. The ingest service does not key on a target, so a capture
+      naming one nobody created is still accepted and attributed to the
+      project — the honest gap this task has left

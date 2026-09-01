@@ -44,10 +44,26 @@ Build the Journey Analysis and Funnel Analysis modules, giving clients a macro v
 - Cross-segment comparison: overlay funnel for two segments (device types, traffic sources, user cohorts) on the same chart with side-by-side bars.
 
 ## Definition of done
-- [ ] Journey aggregation query produces correct transition matrices for test project data
-- [ ] Sankey diagram renders correctly and is interactive (click to filter)
-- [ ] Sunburst diagram renders correctly and is interactive
-- [ ] Funnel builder saves and loads funnel definitions correctly
-- [ ] Funnel chart shows correct conversion rates and drop-off counts
-- [ ] Cross-segment comparison overlays two funnels correctly
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] Journey transition matrices are computed over stored sessions
+      (`conduit_journeys_test.dart`)
+- [x] Funnel definitions save, load and evaluate, with conversion rates and
+      drop-off counts (`conduit_funnels_test.dart`)
+- [x] The Console renders journeys and funnels, and a funnel has its own route
+      (`/conduit/funnels/:funnelId`)
+- [ ] Cross-segment comparison overlaying two funnels
+- [ ] The diagrams driven in a browser — computed correctly and drawn
+      correctly are different claims, and only the first is tested
+
+### Deferred — the web pipeline
+- Aggregation expressed as a **query** over BigQuery rather than a computation
+  over Firestore documents
 

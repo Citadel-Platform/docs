@@ -26,7 +26,17 @@ Stabilize the preserved ARM Console in `citadel_core/arm/console` as the standal
 - Document monitored-project preparation and rules checks.
 
 ## Definition of done
-- [ ] `citadel_core/arm/console` resolves dependencies
-- [ ] `citadel_core/arm/console` static analysis passes
-- [ ] Console docs use Citadel Platform terminology
-- [ ] Project registry aligns with shared core model
+Reviewed 30/08/26 against the tree.
+
+- [~] `citadel_core/arm/console` resolves dependencies — **superseded.**
+      There is no such package and there should not be: ARM's Console is the
+      Platform Console's `/arm` routes, per the 26/08/26 decision that the
+      Platform Console is the single source of truth. Those routes resolve,
+      analyse clean and are covered by the Console suite.
+- [~] `citadel_core/arm/console` static analysis passes — superseded, as
+      above. `flutter analyze` is clean for `citadel_platform`, which is where
+      the code now lives.
+- [x] Console docs use Citadel Platform terminology.
+- [x] Project registry aligns with shared core model — one
+      `ProjectRegistryEntry` in `citadel_core/platform/api`, consumed by the
+      Console, the CLI and the inventory service rather than re-declared.

@@ -29,7 +29,19 @@ Establish shared Citadel Platform foundations before product-specific work: tena
 - Record any auth assumptions in `DECISIONS_NEEDED.md`.
 
 ## Definition of done
-- [ ] Core domain contracts are documented
-- [ ] API conventions are documented
-- [ ] Project registry shape is documented
-- [ ] Production auth decisions remain explicit and unresolved until approved
+Reviewed 30/08/26 against the tree.
+
+- [x] Core domain contracts are documented —
+      `_dev/docs/shared_domain_model.md`.
+- [x] API conventions are documented — `_dev/docs/shared_api_conventions.md`,
+      and `_dev/docs/platform_api_proxy.md` for the proxy seam.
+- [x] Project registry shape is documented —
+      `_dev/docs/project_registry_contract.md`.
+- [x] Production auth decisions remain explicit and unresolved until approved
+      — `_dev/docs/development_auth_posture.md` states that production auth is
+      unresolved at the endpoint-implementation layer, and the dev contract
+      (`DevSessionContract`) is named rather than implied. In practice the
+      Console now authenticates through Firebase Auth and Google OIDC with
+      Palisade owning every authorization question, so the doc is the thing
+      that has fallen behind rather than the code — worth a refresh, not a
+      reopened box.

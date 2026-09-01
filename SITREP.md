@@ -213,8 +213,29 @@ Two Google Cloud projects are in play.
 | Service | Job |
 |---|---|
 | `citadel-platform-api` | The single front door. Everything goes through it. Public, but every route is authenticated and permission-checked. |
-| `citadel-exigence-runtime` | The original shared Exigence runtime. |
 | `citadel-arm-evidence` | ARM's evidence intake. |
+
+> **Corrected twice, 31/08/26.** This table listed `citadel-exigence-runtime`
+> in `citadel-platform`. It does not exist — `gcloud run services list` returns
+> the two services above and nothing else. Client runtimes **do** exist, in the
+> client's own Google Cloud project, which is where the per-artifact runtime
+> design puts them: `learning-gcp-404803` carries
+> `cit-demo-project-5ec5-runtime` (provisioned 31/08/26 through the real flow),
+> `cit-demo-sandbox-2778-runtime` and `cit-demo-sandbox-de61-agent`.
+>
+> Do not check any of this with `/healthz`: it answers Google's own 404 even
+> for services that exist. Use `gcloud run services list`, or an application
+> route.
+>
+> The MCP endpoint is **live on `cit-demo-project-5ec5-runtime`** and its three
+> refusals are proven in production: 403 anonymous, 400 with no run
+> coordinates, 404 for a run the runtime does not host. What has not been
+> driven is a successful tool call against a run that exists.
+>
+> **Before upgrading any other client runtime**, back-fill an artifact revision
+> for it. The new image's bootstrap writes one and the old image's never did, so
+> a client the old image built cannot start the new one. `demo-project` is
+> migrated; `demo-sandbox` is not.
 
 **Job (Cloud Run Jobs)**
 
@@ -485,3 +506,56 @@ and nine modules build on it. Artifacts *are* LangGraph graphs.
 
 So an agent that searches the corpus, calls APIs, and writes rows into a
 workbook works now. Reading spreadsheets and touching slides is the gap.
+
+---
+
+## Addendum — 31/08/26
+
+Written after the overnight run against the 30/08/26 feature-set review. It
+amends the table in §0 and nothing else; where this and the 26/08/26 body
+disagree, this is newer.
+
+| Product | What changed | Still true |
+|---|---|---|
+| **ARM** | **Tickets exist, and a restricted one can be opened.** A ticket is a person waiting for an answer about a case log: four statuses, a Markdown history both sides write into, an email allowlist, and a public link that serves the conversation without the evidence. The SDK writes one from an error dialog, and suppresses repeated captures of one fingerprint within a session. | Still reads the client's own Firebase; no infrastructure of its own. |
+| **Conduit** | **Several capture sources per project**, each with its own key, configuration and enabled flag; ingest resolves from the key that was sent. | Analytics beyond collection is still deferred. |
+| **Exigence** | **Citadel's tools are speakable over MCP** — a transport in front of the existing policy gate, not a second authorisation path. A project records whether its runtime serves them and whether artifacts start from the Superharness. | Nothing mounts the MCP endpoint yet: authenticating a creator's own process is undecided. |
+| **Palisade** | The Watchdog now compares **deployed GCP IAM and Cloud Run configuration** against what provisioning declared, and the page opens with a count of each kind of finding that says "not read" rather than zero. Custom roles are stored, resolvable, grantable and edited as a multi-select; a grant naming a deleted one confers nothing and says so. | Expiry is now a property of a **boundary**, not an identity or a grant (decided 31/08/26). The detector over data-handling rules with no expiry is not built. |
+| **Baker** | **The catalogue is real** (31/08/26): six modules on `seed/initial-modules`, indexed into the registry and served by the deployed API, and a deployment record for `axis-education` whose production release runs two modules behind the catalogue. **Three tabs, built**: the module catalogue (indexed from a clone), a project's deployments with the module drift against that catalogue, and the Devstation's state and connection. All five permissions are superdev-only. | The VM itself is unprovisioned — Feature 5.3 — and the route says it cannot act rather than pretending. |
+| **Manifold** | **Email is a line type and carries messages.** Resend is the transport (decided 31/08/26). Sending is an `ExternalChannel` beside WhatsApp's; receiving is a Svix-verified endpoint that survives a secret rotation; publication verifies the key against the provider. **A line now carries its own status** — active, suspended, pending verification — so a line switched off and a line nothing is listening to stop reading identically. | A line still needs a runtime built to carry email, which is the same deployment decision that gates the WhatsApp webhook. A project with no runtime now reports its lines as pending rather than active. WhatsApp unchanged. |
+
+**Deployed 31/08/26.** `citadel-platform-api` revision `00029-gjg` carries
+image `sha256:a2fc16e9`, holding `CITADEL_RESEND_API_KEY_SECRET` and a
+`CITADEL_TICKET_TOKEN_SECRET` mounted from Secret Manager, so a reader session
+can now be minted and believed. The Console is live at
+`https://citadel-platform.web.app`, built through
+`flutter_with_platform_env.sh` so it carries the Platform API address. Proven
+against the deployed service rather than a test: the public ticket route
+answers `notFound` on an unknown ticket rather than "no route matches", an
+authenticated route answers 401, and **CORS preflight from
+`https://citadel-platform.web.app` is allowed** — the one thing no test could
+reach.
+
+**Email is proven** (31/08/26). The server's own Resend sender was driven
+against the real API and the owner read the result — `last_event: delivered`,
+and the six-digit code quoted back out of the inbox. The sending address is now
+the *client's* own line rather than a deployment constant, because Resend is a
+client's email solution and a code from a company the customer has never heard
+of reads as phishing. `obsivision.com` is registered at Resend and unverified;
+its DNS is at Porkbun, which this session holds no credential for, so a
+restricted ticket still cannot be opened from its link.
+
+**The API has been driven authenticated in production** (31/08/26), which no
+previous session had done: `_dev/scripts/mint_operator_id_token.sh` mints a
+real Firebase ID token from the `serviceAccountTokenCreator` grant the runtime
+root already declares. Baker's catalogue, Baker's deployments, the policy
+expiry review, the relay declaration (published, and refused on republication)
+and the boundary inventory all answered against revision `00031-n5m`.
+
+**Still not proven: nothing has been driven in a browser by a person**, and no
+email has gone to anybody but the owner from Resend's test sender.
+
+Every gate passes in every repository. Three joins are covered rather than
+assumed — the SDK's ticket document read back through the ARM service against
+the Firestore emulator, and the Console's own HTTP client against the real
+Platform API routes for tickets and for Baker.

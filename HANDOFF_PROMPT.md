@@ -1,200 +1,366 @@
-# Handoff — 29/08/26 06:45
+# Handoff — 01/09/26, the four decisions acted on
 
-Read `DECISIONS.md` (28/08/26 entries), then `CURRENT_TASK.md`. This brief
-covers only what changed in this session and what it leaves you.
+All four questions in `DECISIONS_NEEDED.md` 01/09/26 came back answered and
+were built the same day. Read `CURRENT_TASK.md` first — its 01/09/26 section is
+item-by-item — then `DECISIONS.md` 01/09/26 for what was decided, then
+`DECISIONS_NEEDED.md`, which is now one question and two findings.
 
-## Where the work stands
+## What this session did
 
-Phase 2's Artifact substrate is complete. The immutable Artifact revision is
-the single authoritative record: it owns typed graph and trigger configuration
-and pins every shared resource and Palisade boundary by digest. Everything that
-competed with it is deleted, not deprecated.
+**Country resolution exists as infrastructure with no database in it.** The
+catalogue of three candidates carries each licence's exact terms and verbatim
+attribution; the parser and range resolver answer from the truncated address
+ingest actually stores; the deployment names which file it carries and prints
+it at start; the Console switch is per project and does not move until the
+operator has been shown the licence and offered the whole obligation as a file.
+What is stored is who accepted it, when, and which database. No file is
+bundled, because no licence has been taken — that is procurement and it is the
+last thing on Conduit C0.
 
-Nine commits across four repositories:
+**`conduit_alert_events` is gone rather than repointed.** Model, codecs,
+collection constant, `ConduitAlertStatus`, the security-rules match and the
+Console's whole read path. The Conduit alerts page keeps its rules and probes;
+its history panel points at the Dashboard, which is the one alert surface.
 
-    citadel_core       1eae5b4  retire the Exigence configuration proxy routes
-                       03dede0  pin boundaries a bootstrapped artifact publishes against
-                       8896111  publish Access and Effect Boundaries as revisions
-                       7e8f83d  refuse a boundary id nothing could ever pin
-    citadel_core/exigence
-                       80f549b  own typed configuration in artifact revisions
-                       3cf98e5  run from artifact revisions, not an active pointer
-                       b763dba  pin boundaries a bootstrapped artifact publishes against
-                       a95d1ed  hold the platform's coordinate contract from this side
-    citadel_platform   633d95f  remove the unreachable artifact configuration surface
-                       6c12e60  manage Access and Effect Boundaries
-                       7483d04  say the Exigence build step needs published boundaries
+**Dead-click detection was confirmed as built** — off by default, two
+tenth-scale frames per watched interaction, a project that is not looking
+records none.
 
-All four working trees are clean.
+**The retired clients' infrastructure is actually gone now.** `AGENTS.md` said
+it had been deleted on 29/08/26. It had not: five Cloud Run services were
+running and being billed. Three Terraform roots destroyed, seventy-five
+resources, nothing the live `demo-project` uses touched, every shared API still
+enabled.
 
-## The three things worth knowing before you touch anything
+## Three things worth knowing before you touch anything
 
-**1. A run snapshot is one coordinate, not six.** It names an Artifact revision
-and its digest. The revision digest already covers the typed configuration and
-the evidence coordinates of every shared resource it pins, so everything is
-proved transitively. There is no longer a combination of versions a run can
-record that no publication ever produced. If you add an input a run depends on,
-it belongs inside the revision or behind a digest-pinned reference — not
-alongside the snapshot.
+**1. Cloud Run's `deletion_protection` is a Terraform-only field.** It is not
+in the Cloud Run v2 API. `gcloud run services update --no-deletion-protection`
+does not exist and a PATCH on `deletionProtection` is rejected as an unknown
+field — the provider reads it from *prior state* when it plans a destroy. The
+only ways to move it are a config-driven apply or an edit to the state.
 
-**2. `resourceId:revision:digest` is a three-language contract.** The Platform
-API composes it in Dart, Terraform validates it, the TypeScript runtime parses
-it into a revision. They disagreed once already: both boundary services
-accepted `@` in a boundary id and both parsers reject it, so such a boundary
-published cleanly and could never be pinned. Two contract tests now hold the
-grammars together —
-`citadel_core/platform/server/test/platform_artifact_authority_contract_test.dart`
-and `citadel_core/exigence/test/platform_authority_contract.test.ts`. The
-patterns are quoted literally in both, deliberately: change one and the test
-fails showing you the two spellings. Do not "fix" that by importing a shared
-constant none of the three languages can see.
+**2. `templates/exigence-agent/` is an empty directory.** The state at
+`provisioner/exigence-agent/demo-sandbox/agent.invoice-triage` was applied from
+a template that lives in an image and nowhere else. It was destroyed from a
+decommission-only root — backend and provider, no resources, so everything in
+state plans as an orphan. Whatever built `cit-demo-sandbox-de61-agent` cannot
+currently be rebuilt.
 
-**3. Authority is composed server-side.** A provisioning caller names the
-boundaries it means (`access_boundary_id`, `effect_boundary_id`,
-`data_handling_boundary_id`, `artifact_identity_id`, each defaulting to
-`default`); the API resolves those names to pinned coordinates.
-`artifact_authority` is a *resolved* variable — naming it is refused, not
-ignored, because a digest from a browser could bind an artifact to a revision
-nobody reviewed. Resolution runs again at apply rather than carrying the plan's
-answer.
+**3. A destroy does not take the client's database.** The runtime template sets
+`deletion_policy = ABANDON` while `deletion_protection` is on, deliberately, so
+`demo-sandbox` and `exigence-lab` are two Firestore databases standing with
+nothing owning them. That is the one open question.
 
-## What is verified, and what is not
+## Where to pick up
 
-Gates, all passing: 556 Exigence unit + 96 Firestore emulator, 212 platform
-server (1 emulator-gated), 31 platform API, 291 Console, 173 CLI, 46 Palisade
-authority. `terraform validate` passes on the runtime module and on the
-provisioning template with its module staged as the image build stages it.
+1. **Deploy the Platform API with the alert store**, run a sweep against
+   `demo-project`, and put a real finding on the Dashboard and in an inbox.
+   Still the one thing that turns Feature 0.8 from tested into true, and it did
+   not move today.
+2. **Obtain a geo database** under one of the three licences and put it in the
+   ingest image with `CITADEL_CONDUIT_GEO_DATABASE` and
+   `CITADEL_CONDUIT_GEO_DATABASE_ID`. Everything either side of the file is
+   built and tested.
+3. **Conduit C1, incremental rollups.** Everything in Layer 2 and 3 waits on
+   it, and it removes the read-cost cliff.
+4. Untouched from the previous handoff: Baker's Devstation VM (Feature 5.3), a
+   successful `tools/call` over MCP against a started run, and driving any of
+   it in a browser.
 
-The Console flow was driven in a real browser: three boundary tables render and
-fail independently, the rule-line validation blocks and names the offending
-line, publishing re-renders only its own table, and revisions increment per
-boundary with history kept.
+---
 
-**The HTTP seam is unproven.** The Console's real `HttpPlatformWorkspaceClient`,
-the `/access-boundaries` and `/effect-boundaries` routes under a real Firebase
-ID token, and a console-driven provisioning build have never run together. The
-browser E2E used the seed workspace with an in-memory transport double; the
-emulator tests drive real Firestore but not the routes above it. **The deployed
-API predates every commit in this session.** Treat "the tests pass" as covering
-each layer, not the joins — that distinction is exactly what Phase R cost five
-production-fatal defects to learn.
+# Handoff — 01/09/26 04:40
 
-## Added 29/08/26 — platform owners
+Written after an unattended overnight run against the previous handoff's
+"Where to pick up". Read `CURRENT_TASK.md` first — its 01/09/26 section is the
+item-by-item state — then `DECISIONS_NEEDED.md` 01/09/26, which is the four
+questions the run stopped at.
 
-A configured set of accounts now gets `superdev` on every project, written per
-project when the project is claimed (`CITADEL_PLATFORM_OWNERS`, and
-`platform_owners` on the runtime module; the production root names the
-operator). This resolved the 15/08/26 global-owner question: there is still no
-global grant, only a global *rule* that writes an ordinary project-scoped one.
+## What this session did
 
-It fires **only on a claim**, so projects that already exist are covered by
-`tool/reconcile_platform_owners.dart` instead — which adds only what is
-missing, and reports rather than corrects an owner holding less than superdev.
-A read-only dry run on 29/08/26 found the operator already holding superdev on
-all four live projects (`axis-education`, `citadel-platform`, `demo-sandbox`,
-`exigence-lab`), so there is nothing outstanding.
+Non-Conduit first, as instructed, then Conduit C0.
 
-The one thing to watch: a project created but never claimed has no grants for
-anyone. The Console claims immediately after creating and is the only creation
-path today, so a second one must claim too.
+    citadel_core/exigence   99b50e1  The Superharness, as a runtime (4.7.2)
+                            ad5a207  Measure egress against what was published
+                            48f7a89  The forward migration for an old client
+    citadel_core            d51e707  One alerting service (Feature 0.8)
+                            eaec041  The sweep files Conduit's findings too
+    citadel_platform        f0c963c  The Dashboard shows what every service found
+    citadel_core/conduit    abfb531  Cadence at the edge, dead clicks observed
+                            3b50422  Alert rules that are actually measured
 
-## What to do next, in the order I would do it
+Gates in `_dev/test_status.md`. Nothing is deployed.
 
-1. **Deploy and prove the seam.** Build and deploy the Platform API, publish an
-   Access and an Effect Boundary for a real project through the Console as a
-   signed-in operator, then drive a provisioning plan and confirm the job's
-   variables carry a resolved `artifact_authority`. Until that runs, no client
-   can actually be built.
+## Where to pick up
 
-2. **Decide what a Console republication looks like.** `enabled`, schedules,
-   webhook secrets and graph inputs are all fields of an immutable revision
-   now, so changing any of them means publishing a new one. The Console has no
-   flow for that, which is why the artifacts list lost its Enable/Disable
-   toggle — I removed it rather than leave a button calling a deleted route.
-   This is the largest missing capability.
+1. **Deploy the Platform API with the alert store**, run a sweep against
+   `demo-project`, and put a real finding on the Dashboard and in an inbox.
+   That is the one thing that turns Feature 0.8 from tested into true.
+2. **Answer the four questions** in `DECISIONS_NEEDED.md` 01/09/26 — the GeoIP
+   licence blocks Conduit's last C0 item.
+3. **Conduit C1, incremental rollups.** Everything in Layer 2 and 3 waits on
+   it, and it removes the read-cost cliff.
+4. The pick-up items from the previous handoff that this run did not touch:
+   Baker's Devstation VM (Feature 5.3), a successful `tools/call` over MCP
+   against a started run, and driving any of it in a browser.
 
-3. ~~**Feature 4.5's last acceptance item: Manifold Meta WhatsApp.**~~ — built
-   29/08/26, see the section below.
+## Three things worth knowing before you touch anything
 
-## Traps
+**1. `conduit_alert_events` is dead.** Conduit evaluates rules and returns
+findings; the platform alert store records them. Nothing writes that
+collection, and the Conduit alerts page still reads it — see the third question
+in `DECISIONS_NEEDED.md`.
 
-- ~~`npm run test:firestore-emulator` fails before reaching the tests~~ —
-  fixed 29/08/26. firebase-tools 13.35.1 cannot load its own
-  `universal-analytics` dependency under this environment's Node 21; the pin is
-  now 14.19.0 and `npm run test:firestore-emulator` runs the whole suite (101
-  tests). Do not lower the pin. The emulator is on 127.0.0.1:**8187**, not 8080.
-- Dart emulator tests must send `Authorization: Bearer owner`. The rules deny
-  every browser read and write of the boundary collections, and the emulator
-  enforces them; the deployed API reaches Firestore as a service account whose
-  credentials bypass rules.
-- The provisioning template cannot be validated in place — its
-  `source = "./modules/runtime"` is materialised at image build. Stage
-  `citadel_core/exigence/infra/modules/runtime` at `modules/runtime` first.
-- Publishing a boundary is the only way to change one. There is no update path
-  and there should not be one.
+**2. Dead-click detection changed meaning.** It was the app's own
+`isInteractive` flag; it is now a repaint-and-route observation, off by
+default, and a project that is not looking records none rather than zero.
 
+**3. A sweep is a POST, deliberately.** Opening the Watchdog does not create
+alerts. If reading a page filed findings, the record of what Citadel found
+would depend on who happened to look.
 
-## Added 30/08/26 — Manifold WhatsApp is feature-complete in code
+---
 
-Feature 7.1's definition of done is met except for the one item that needs
-Meta. 653 Exigence unit tests, 110 integration tests, 312 Console tests, 235
-platform server tests, 46 Palisade tests. Four repos clean.
+# Handoff — 31/08/26 13:45 (previous)
 
-| Definition of done | State |
-| --- | --- |
-| A WhatsApp connector ingests, threads and replies through the project inbox | Done |
-| Duplicate and out-of-order provider events are proven safe | Done |
-| Message bodies and attachments never cross client boundaries | Done |
-| Consent/opt-out and delivery failures are enforced and visible | Done |
-| Provider sandbox/live integration tests and browser inbox E2E pass | Browser E2E done; **live blocked** |
+Written after an unattended overnight run against the 30/08/26 feature-set
+review, plus the morning's work on the email transport once it was decided. Read `_dev/docs/feature_set_review_30_08_26.md` first: it is the
+reconciliation between the product owner's understanding and the build, and it
+wins over older feature files wherever they disagree. Then `CURRENT_TASK.md`,
+whose "Active task (31/08/26)" section is the item-by-item state.
 
-What exists: the channel record and its publication (Console form included),
-the Meta send connector, webhook verification and receipt, the public webhook
-endpoint, consent and opt-out, conversation threading, delivery state,
-attachment collection into the client's bucket, the Console inbox, and human
-replies from it.
+## What this session did
 
-### Where the next agent picks up
+Everything the review left outstanding is built, and the one decision that
+blocked two features has been made and acted on. Thirty-eight commits across
+five repositories, every gate green:
 
-**1. Nothing is composed into a running runtime.** Every piece above is built
-and unit-tested in isolation; `runtime_composition.ts` wires none of it. That
-is the single largest remaining gap and it is blocked behind the Exigence
-runtime deploy, which needs an Artifact revision published for `demo-project`
-first. Do that before anything else in Manifold — until it is done, none of
-this has ever run as a whole.
+    citadel_core/arm        493ea55  Tickets: a fault nobody could name…
+                            01ae6b6  Attribute a customer's ticket entry…
+    citadel_core            03bd255  Serve the ticket routes, the deployment scan…
+                            f62888a  Serve a ticket to the person waiting on it
+                            71a299d  Baker: a catalogue, a deployment record…
+                            61fadec  Index the Factory's modules from a clone
+                            905eaeb  Record whether a runtime speaks MCP…
+                            7dbafed  Email as a line type, and honest about…
+    citadel_core/exigence   5eeab15  Speak Citadel's tools over MCP
+                            65806d6  The Superharness, as a scaffold…
+    citadel_core/conduit    fb994df  Capture a project from more than one place
+    citadel_platform        28c3819  Work a ticket, scan a deployment…
+                            d7d7129  A ticket page for somebody who is not signed in
+                            bf9f874  Baker's three tabs
+                            6b7dfd8  Switch Citadel MCPs on, and say what that does not do
+                            5664199  List an email line beside the number
+                            2243e5c  Say how much of each kind, before any of it
+                            566351a  Wire Baker and email lines into the local harness
 
-**2. The webhook is not mounted.** `createTaskReceiverHttpServer` takes an
-optional `webhook` handler and nothing passes one. Serving it means the Cloud
-Run service accepts unauthenticated requests, which is Sid's decision, not a
-wiring detail. Ask before switching it on.
+…then, after **Resend was chosen as the email transport (31/08/26)**:
 
-**3. Live validation needs Meta.** A WABA id, a phone number id, three Secret
-Manager version paths (access token, verify token, **app secret** — the app
-secret signs deliveries and is not the verify token) and a test recipient. Sid
-is setting up the Business Account.
+    citadel_core            bc2655a  Prove an address on a ticket's allowlist with a code
+                            71b4db7  Check an email line's credentials, and let it be switched on
+                            876a7cd  Bound what a ticket link can write
+                            bc828e5  Stop a ticket link replying as fast as HTTP allows
+                            73d3797  Pin what Baker reads when there is nothing to read
+    citadel_core/arm        f132aa9  Never suppress a capture somebody asked for
+                            ec64949  Exercise the ticket store through the client the runtime uses
+                            5b9e8e4  Prove the ticket join against real Firestore
+    citadel_core/exigence   d024aa2  Carry a Manifold email line, in and out
+                            657495e  Resolve a published email line into something that can send
+                            0151c2c  Offer the email line to a graph, beside the number
+                            740b7c1  Receive on an email line
+    citadel_platform        3a885a1  Ask a private ticket for a code, then read it
+                            38d486c  Publish an email line switched on, or not
+                            1d12cb8  Say on the case log when somebody wrote in about it
+                            570bfb3  Open a ticket from the fault, and filter by status
+                            4b08c0f  Count the people waiting, beside the faults
+                            be5d112  Put the Console's ticket client and the API's routes in one test
+                            8dd0427  Put the Console's Baker client and the Baker routes in one test
 
-**4. Feature 7.1's remaining task text**, beyond the definition of done:
-assignment, internal notes and drafts (Task 7.1.4), and settling retention and
-data-classification choices (Task 7.1.2) before production use. Neither is a
-DoD item; both are real product gaps.
+Gates: 173 CLI, 31 platform API, 382 platform server, 32 ARM service, 10 ARM
+tooling, 8 ARM tooling-core, 101 Conduit ingest, 752 Exigence (123 skipped,
+emulator-gated), 389 Console. `dart analyze` and `flutter analyze` clean in
+every package; the Console builds for web from both entry points.
 
-**5. Feature 7.2** — Manifold Console and cross-service resolution — is
-untouched and depends on this plus ARM, Conduit, Exigence, Baker and Palisade.
+## The standing instruction this ran under
 
-### Traps specific to this work
+*Where a feature needs a decision the owner has not made, build everything
+around it and leave the deciding seam open rather than guessing.* That produced
+five deliberate seams. Each is small, named in code, and reported to the user
+rather than hidden:
 
-- **Phone numbers are E.164 with the leading `+`, everywhere.** The webhook
-  normalises Meta's bare `6591234567` to `+6591234567`, and the connector,
-  consent ledger and conversation store all expect that form. This already
-  broke once and every unit test passed while it was broken, because each
-  fixture spelled it the way its own component wanted.
-  `whatsapp_receive_path.test.ts` exists to catch it: it drives a real Meta
-  payload end to end and its fakes run the real validators. **Do not add a
-  fake to that file that skips validation** — that is precisely what let the
-  bug through.
-- **The delivery-status lookup is a collection-group query** and needs the
-  index in `exigence/infra/modules/runtime/main.tf`. Without it every message
-  stays at `sent` for ever, which looks like a working channel.
-- The channel record's third secret is `webhookSigningSecret`, Meta's *app
-  secret*. The verify token is used once, at subscription time, and proves
-  nothing about a delivery.
+1. ~~**Email transport.**~~ **Decided 31/08/26: Resend**, and both features
+   are built — ticket access codes and sessions, Manifold email lines sending
+   and receiving. What is left is deployment, not code: the Platform API needs
+   `CITADEL_RESEND_API_KEY_SECRET` (or `RESEND_API_KEY` for a local run),
+   `CITADEL_TICKET_FROM_ADDRESS` and `CITADEL_TICKET_TOKEN_SECRET`; the
+   Exigence runtime needs building with `emailChannels`, `emailFetch` and the
+   inbound endpoint mounted, which is the same deployment decision that gates
+   the WhatsApp webhook. Until a runtime carries email, a published line
+   refuses at the moment of sending, by name.
+2. **The MCP endpoint's own authentication.** `citadel_mcp_server.ts` and both
+   its transports exist and are tested; nothing mounts them. A creator's own
+   LangGraph process calling in has to prove which run it is calling for, and
+   that is an authentication decision rather than wiring.
+3. **Baker's VM provisioner.** `operateDevstationWith` is absent, so start,
+   stop and destroy answer "this deployment cannot act". Feature 5.3 is where
+   the Terraform belongs.
+4. **Baker's GitHub access.** `tool/index_baker_modules.dart` indexes a local
+   clone. Whoever decides the Platform API may hold a GitHub credential
+   replaces the directory walk and nothing else.
+5. **`provisionedMembers` for deployment drift.** Nothing records what
+   Terraform created per project, so member-level drift is reported as unknown
+   rather than every binding being called unexpected.
+
+## Three things worth knowing before you touch anything
+
+**1. A refusal is a value, everywhere.** The MCP server returns denials as tool
+results, the ticket routes answer a restricted ticket with what would be
+needed, the Watchdog band says "not read" rather than counting zero, and the
+Devstation page says the state is what Citadel asked for rather than what
+Compute reports. If you add a surface, the question to ask is not "what does it
+show when it works" but "what does it show when it could not look".
+
+**2. The public ticket route is the only unauthenticated surface on the
+Platform API**, and it now has four verbs. `GET /v1/public/tickets/{p}/{t}`
+serves `armPublicTicketView` — the conversation, never the case ids, the
+fingerprint, the session or the reporter's address, *whether or not the reader
+proved an address*, because the allowlist decides who may read the conversation
+and not what evidence is disclosed. `POST …/verify` sends a code and answers
+identically whether or not the address is on the allowlist. `POST …/session`
+exchanges a code for a token bound to that one ticket. `POST …/updates` is the
+reply. Its reply write is capped at
+5,000 characters against the ticket's own 500-entry cap, and limited to twenty
+replies per ticket per hour **per instance** — partial on purpose, because
+counting it in Firestore would let anybody with a link spend a client's money
+on writes to find out they were refused. A cross-instance limit is the gap that
+remains. Do not add a second
+unauthenticated route without re-reading that one.
+
+**3. Baker is superdev-only, all five permissions.** It is Citadel's build
+system, not something a client is sold: the module catalogue is the supply
+chain, deployments name the module versions inside a client's application, and
+the Devstation acts as a developer on the client's project.
+
+## What is unproven
+
+The same distinction Phase R cost five production defects to learn: **the tests
+cover each layer, not the joins.** Updated 31/08/26: the API and the Console
+*are* now deployed, and two of the items below moved as a result. What is still
+outward-facing and untouched is a person in a browser, and a real email.
+Specifically unproven end to end:
+
+- The ticket routes under a real Firebase ID token. **The store join is now
+  proven**: `citadel_core/arm/citadel_arm_service/test/arm_ticket_emulator_test.dart`
+  writes a ticket with the SDK's own document builder and reads, lists and
+  works it through the service against the Firestore emulator. What remains
+  unproven above that is a real Firebase token and a deployed service: the
+  Console's client and the API's routes are now put together in-process by
+  `citadel_platform/test/platform_ticket_seam_test.dart`, which is what pins
+  the paths, methods and envelopes the two sides agree on.
+- ~~The public ticket page against the deployed API, including CORS from the
+  Console origin.~~ **Half proven 31/08/26.** The API is deployed, the Console
+  is live at `https://citadel-platform.web.app`, an OPTIONS preflight from that
+  origin is allowed by the deployed service, and the public ticket route
+  answers `notFound` on an unknown ticket rather than "no route matches" — the
+  difference between a route that exists and one built after the last deploy.
+  What is unproven is the page itself with a real ticket in front of a person.
+- Baker's three tabs against real registry documents. The Console-to-route seam
+  is pinned in-process (`platform_baker_seam_test.dart`); what is unproven is
+  the Firestore side. `bakerCatalogue`,
+  `bakerDeployments` and `bakerDevstations` do not exist in any project yet;
+  every tab renders its own "nothing recorded" state until something writes
+  them, which is correct and is also why nothing has exercised the read path.
+- The MCP server against a real LangGraph client, for the reason in seam 2.
+- **Nothing has sent a real email**, and nothing can until a domain exists. The
+  Resend sender, the Manifold channel and the credential verifier are all
+  driven through injected transports; no test reaches `api.resend.com`, and no
+  code has been delivered to an inbox. The deployed service holds the API key
+  and the signing salt but deliberately no from-address, because
+  `GET /domains` on the Resend account returns an empty list.
+- **The inbound endpoint has never received a real Svix delivery.** Its
+  signature check is tested against signatures this repository generates, which
+  proves the algorithm and not the provider's spelling of it.
+
+## Where to pick up
+
+Rewritten 31/08/26, end of day.
+
+1. **Back-fill an artifact revision for every client the old runtime built,
+   before upgrading any of them.** Settled 31/08/26: the new image's bootstrap
+   writes `exigence_artifact_revisions` and the old one never did, so a client
+   built by the old image cannot start the new one. `demo-project` is already
+   migrated (its control plane was wiped and rebuilt, which is the test-client
+   equivalent). `demo-sandbox` is not. `ensureInitialArtifactRevision` already
+   publishes the right bundle and refuses to publish over a revision it cannot
+   read, so the backfill is that function run per client rather than new code.
+
+2. **Deliver Watchdog findings.** Decided 31/08/26: delivery belongs to the
+   Watchdog rather than to Exigence, and email is proven, so the transport
+   exists. Five detectors produce findings today and none of them reaches
+   anybody. Severity-thresholded, per project, to the operators on it. This
+   closes most of Feature 1.4 and the last bullet of 6.2.5 at once.
+
+3. **Exercise MCP with a real run.** The endpoint is live on
+   `cit-demo-project-5ec5-runtime` and its three refusals are proven in
+   production; what has not been driven is a successful `tools/call` against a
+   run that exists, which needs a run started on that runtime first.
+
+4. **The rest of Feature 4.7** — the Superharness runtime, Localbridge over
+   MCP, the snippet pasted into a real LangGraph project.
+
+5. **`obsivision.com`** is `pending` at Resend with all three DNS records
+   resolving; verification is asynchronous on their side. Once `verified`, set
+   `ticket_from_address` and a client line sends from a real domain.
+
+6. **The undeclared-egress detector.** The declaration it measures against is
+   published, versioned, rendered and exercised; the comparison is not written.
+
+7. **The Devstation VM** (Feature 5.3), approved to provision, test and destroy.
+
+8. **Drive it in a browser.** Two live hosts, CORS proven from both, nobody has
+   clicked anything.
+
+## What the deployed service actually does
+
+Worth reading before assuming anything about it.
+
+- `citadel-platform-api` revision `00029-gjg`, image `sha256:a2fc16e9`.
+- It holds `CITADEL_RESEND_API_KEY_SECRET` (a pinned Secret Manager version)
+  and `CITADEL_TICKET_TOKEN_SECRET` (mounted from Secret Manager, so the salt
+  is in neither Terraform state nor a saved plan). Sessions can be minted and
+  believed.
+- It does **not** hold `CITADEL_TICKET_FROM_ADDRESS`, on purpose. Nothing can
+  send until a domain is verified.
+- `GET /healthz` answers Google's own 404 through the front end even though the
+  container serves it and the startup probe passes on it. Unmatched application
+  routes answer JSON `notFound`; use one of those to tell "deployed" from
+  "reachable", not `/healthz`.
+- The image build needs `arm/` in the Cloud Build context. It is gitignored in
+  `citadel_core` because it is a separate repository, so
+  `citadel_core/.gcloudignore` re-includes it. Removing that file breaks the
+  build at a `COPY`, not at a test.
+- Artifact Registry has **tag immutability on**. Reusing a tag fails the push
+  after ten retries; give every build its own tag. Tags so far:
+  `v20260831-2` … `v20260831-4`.
+- **To call the deployed API as a person**, not just to prove a route exists:
+  `source citadel_core/.env && bash _dev/scripts/mint_operator_id_token.sh`.
+  It signs a Firebase custom token with the admin identity the operator holds
+  `serviceAccountTokenCreator` on, then exchanges it through Identity Toolkit.
+  No service account key is downloaded and none should be.
+- The boundary inventory route is `/palisade/boundary-inventory`, not
+  `/palisade/inventory`. The second answers `notFound` and looks like a
+  deployment problem.
+- **The provisioner bakes its Terraform templates into its image.** Editing a
+  template in the repository changes nothing until the image is rebuilt and the
+  `provisioner` root applied; nothing compares the two, so the drift is silent
+  until a plan fails on a variable that has existed for days.
+- The client runtime image is pinned in
+  `platform/infra/environments/production/provisioner/main.tf`, as
+  `CITADEL_TEMPLATE_DEFAULTS.container_image`, not in a tfvars file.
+- Client runtimes live in the **client's** Google Cloud project, not in
+  `citadel-platform`.
+- A provisioning job reporting `applied` proves nothing on its own. Check the
+  plan: an empty one — 0 to add, 0 to change, 0 to destroy — reports `applied`
+  having done nothing, which is exactly what happens after a failed apply has
+  already written the new spec. Read the Cloud Run revision list instead.

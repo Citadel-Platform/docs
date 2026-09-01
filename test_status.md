@@ -1,3 +1,26 @@
+01/09/26 — Conduit ingest deployed; Manifold email inbound mounted
+
+- PASS conduit ingest 132 (was 129), `dart analyze` clean
+- PASS exigence 924 declared / 799 pass / 0 fail (was 795), `npm run check`
+  clean, determinism lint clean
+- PASS `terraform validate`: `platform/infra/modules/conduit`, the production
+  runtime root, `exigence/infra/modules/runtime`, and the provisioning template
+  with its module staged
+- PASS against the deployment: `/v1/healthz` 200; `/v1/events` 401 without a
+  key and 401 "Unknown Conduit project key" with a bogus one, which is a real
+  control-plane read; `/v1/config/{unknown}` 404
+
+New conduit tests: health answers on both `/healthz` and `/v1/healthz` (the
+edge reserves the first on `*.run.app` and the container never sees it); an
+unexpected failure is opaque to the caller and logged for the operator; a
+named service account key that will not parse is an error rather than a quiet
+demotion to Application Default Credentials.
+
+New exigence tests: a runtime told to receive email serves that webhook and one
+not told does not; a customer's email reaches the thread through the composed
+path; an unsigned delivery is refused and never reaches the thread; the public
+service serves both lines, or either one alone.
+
 30/08/26 — Exigence 4.5.6: an artifact can actually send through Manifold
 
 - PASS exigence `npm run check`, 593 unit (was 592), 119 emulator
@@ -2231,3 +2254,426 @@ design exists to prevent.
 - PASS `citadel_core/platform/server` `dart analyze && dart test` — zero issues, 315 pass.
 - PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 355 pass.
 - NOT COVERED — the Firestore ingress store's bucketing is exercised only through the memory store; no emulator test writes an increment. The Console renders nothing from it yet.
+
+31/08/26 — the 30/08/26 feature-set review, built out overnight
+- PASS `citadel_core/palisade/authority` `dart analyze && dart test` — zero issues, 48 pass (catalogue re-exported for the five Baker permissions).
+- PASS `citadel_core/palisade/boundary` `npm test` — 28 tests, 28 pass.
+- PASS `citadel_core/localbridge` `npm test` — 55 tests, 55 pass.
+- PASS `citadel_core/exigence` `npm test` — 852 tests, 729 pass, 123 emulator-only skip, 0 fail (includes 8 for the MCP server).
+- PASS `citadel_core/platform/api` `dart analyze && dart test` — zero issues, 31 pass.
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — zero issues, 373 pass, 3 emulator-gated skips.
+- PASS `citadel_core/platform/contracts` `dart analyze` — zero issues.
+- PASS `citadel_core/conduit/citadel_conduit_ingest` `dart analyze && dart test` — zero issues, 101 pass.
+- PASS `citadel_core/arm/citadel_arm_service` `dart analyze && dart test` — zero issues, 32 pass, 1 emulator-gated skip.
+- PASS `citadel_core/arm/tooling` `flutter test` — 10 pass. `citadel_core/arm/tooling_core` `dart test` — 8 pass.
+- PASS `citadel_cli` `dart analyze && dart test` — zero issues, 173 pass.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 388 pass.
+- PASS `citadel_platform` `flutter build web --release`, both `lib/main.dart` and `lib/main_dev.dart` — nothing in the night's files is VM-only.
+- PASS `citadel_core/arm/citadel_arm_service` emulator join —
+  `npx -y firebase-tools@14.19.0 emulators:exec --config tool/emulator/firebase.json --project demo-citadel-arm --only firestore "FIRESTORE_EMULATOR_HOST=127.0.0.1:8188 dart test --tags emulator"` — 1 pass. A ticket written by the SDK's own document builder is read, listed and worked by the service through one real Firestore.
+- COVERED NEWLY — the Console's client and the Platform API's routes now meet
+  in-process for tickets and for Baker (`platform_ticket_seam_test.dart`,
+  `platform_baker_seam_test.dart`): paths, methods, envelopes and the
+  authorisation a viewer meets.
+- NOT COVERED — nothing was deployed and nothing was driven in a browser; the
+  run was unattended and both are outward-facing acts. The public ticket page
+  against a deployed API (including CORS), Baker's tabs against real registry
+  documents, and the MCP server against a real LangGraph client all remain
+  unproven.
+- NOT COVERED — the public ticket reply route is rate-limited per instance
+  only. A cross-instance limit needs a store nobody has decided on.
+
+31/08/26 — Resend, ticket verification and email lines
+- PASS `citadel_core/platform/server` `dart analyze && dart test` — zero issues, 382 pass, 3 emulator-gated.
+- PASS `citadel_core/exigence` `npm test` — 875 tests, 752 pass, 123 emulator-only skip, 0 fail.
+- PASS `citadel_core/platform/api` `dart analyze && dart test` — zero issues, 31 pass.
+- PASS `citadel_platform` `flutter analyze && flutter test` — zero issues, 389 pass.
+- NOT COVERED — nothing has sent a real email. The Resend sender, the channel
+  and the verifier are all driven through injected transports; no test reaches
+  api.resend.com, and no code has been delivered to an inbox.
+- NOT COVERED — the inbound endpoint has never received a real Svix delivery.
+  Its signature check is tested against signatures this repository generates,
+  which proves the algorithm and not the provider's spelling of it.
+
+31/08/26 13:05 — BUILT, NOT DEPLOYED
+- Two Secret Manager secrets created in `citadel-platform`, which held none
+  before: `resend-api-key` version 1 (the key from the workspace `.env`) and
+  `ticket-token-secret` version 1 (48 random bytes, generated here and written
+  nowhere else). `citadel-platform-api@` granted `secretAccessor` on both.
+- FAIL then PASS: the API image would not build. `platform/server` gained a
+  runtime path dependency on `citadel_arm_service` for the ticket codec and the
+  public-view redaction, but the Dockerfile never copied `arm/`, and `arm/` is
+  gitignored in `citadel_core` because it is a separate repository — so it was
+  absent from the Cloud Build upload as well. Fixed in both places: the
+  Dockerfile now copies `arm/tooling_core` and `arm/citadel_arm_service` and
+  runs codegen in the latter, and a new `citadel_core/.gcloudignore` re-includes
+  `arm/` while still excluding its `.git`, `.dart_tool` and `build`.
+  Build `3ffebe6a`, image `sha256:29cf3a98`, pinned in `images.auto.tfvars`.
+- Terraform wired for email: the runtime module takes
+  `resend_api_key_secret_version`, `ticket_token_secret_version` and
+  `ticket_from_address`, each absent-able. The salt is mounted as a secret env
+  var so it never reaches state or a plan file; the key is named as a pinned
+  version and read at start-up. `ticket_from_address` is deliberately unset —
+  no domain is verified in Resend, so the service falls back to its own default
+  and nothing can leave.
+- Saved plan `tickets-email.tfplan`: 3 to add, 1 to change, 0 to destroy — the
+  image, the two env vars, the two accessor bindings and the Secret Manager
+  service enablement. NOT APPLIED. Nothing is deployed and no email has been
+  sent.
+
+31/08/26 14:20 — the two smaller ticket items
+- PASS `dart test` in `arm/citadel_arm_service` (33), `platform/server` (384),
+  `flutter test` in `citadel_platform` (389). Analyzers clean in all three.
+- The public reply limit is now the ticket rather than the instance. It counts
+  `endUser` updates in the last hour on the ticket the request had already
+  fetched, so it holds across every Cloud Run instance and costs no extra read
+  and no write — which is what ruled out a counter document. The per-instance
+  tally stays, demoted to closing the race inside one instance. Operator
+  replies do not count, or a busy support conversation would lock the customer
+  out of it.
+- Ticket attachments: `storagePath` is now nullable and `armPublicTicketView`
+  strips it, so a public link carries the file's name, type and size but not
+  where it sits in the project's storage. Both ticket surfaces render them —
+  ticket-level and per-entry — with no control to open one, because the
+  storage path and the signed read are undecided and a button resolving to
+  nothing is worse than no button.
+
+31/08/26 15:40 — DEPLOYED
+- PASS every gate. `dart analyze` clean in all seven Dart packages;
+  `flutter analyze` clean in the Console. Tests: contracts 4, api 37, server
+  384, ARM 33, authority 48, Conduit ingest 101, Conduit SDK 40, Console 390.
+- FAIL then PASS: the image push. Artifact Registry has tag immutability on, so
+  rebuilding `:pending` failed after ten retries with `manifest invalid: cannot
+  update tag pending`. Every build now takes its own tag; this one is
+  `v20260831-2`, digest `sha256:a2fc16e9`.
+- DEPLOYED `citadel-platform-api` revision `00029-gjg` through
+  `terraform apply` on `environments/production/runtime`: 3 added, 1 changed,
+  0 destroyed — the image, the two email env vars, the two secret accessor
+  bindings and the Secret Manager service enablement.
+- PASS deployed, live: `/v1/public/tickets/{p}/{t}` answers a JSON `notFound`
+  for an unknown ticket rather than "No Platform API route matches this
+  request", which is what separates a route that exists from one built after
+  the last deploy. `/v1/projects/{p}/palisade/roles` answers 401.
+- PASS deployed, live: `CITADEL_RESEND_API_KEY_SECRET` reads back as the pinned
+  version and `CITADEL_TICKET_TOKEN_SECRET` as a `secretKeyRef` mount, so the
+  salt is in neither the service definition nor Terraform state.
+- DEPLOYED the Console to Firebase Hosting, `https://citadel-platform.web.app`,
+  built through `flutter_with_platform_env.sh`; the Platform API host is
+  compiled into `main.dart.js`.
+- PASS deployed, live: **CORS preflight from `https://citadel-platform.web.app`
+  is allowed by the deployed API** — `access-control-allow-origin` echoes the
+  Console origin. No test could reach this.
+- NOTE: `GET /healthz` answers Google's own HTML 404 through the front end,
+  while unmatched application routes answer JSON. The startup probe passes on
+  the same path, so the container serves it; do not use `/healthz` to decide
+  whether a deploy landed.
+- NOT PROVEN: no email has been sent. `GET https://api.resend.com/domains`
+  returns an empty list, so `ticket_from_address` is deliberately unset and the
+  service falls back to a default that cannot send.
+
+31/08/26 16:30 — EMAIL PROVEN, BAKER CATALOGUED
+- **PASS, live, human-confirmed: a real email was sent and received.** Not a
+  status code — the owner read it. `tool/send_ticket_code_probe.dart` drives the
+  server's own `createResendEmailSender` against `api.resend.com`; message
+  `f44fd30b-44ba-4942-92cf-5325ab1f4ce5`, `last_event: delivered`, and the code
+  in the body (481920) was quoted back from the inbox. Every email path in this
+  repository had been driven through an injected transport until now.
+- Sent from `onboarding@resend.dev`, which needs no verified domain and only
+  delivers to the account holder. That is a test sender, not the product.
+- **The from-address is now per project.** Resend is the *client's* email
+  solution, so a code goes out from the client's own line — a customer who gets
+  a code from a company they have never heard of is being phished as far as
+  they can tell. `PlatformEmailMessage` carries `from`; the verify route
+  resolves the newest enabled email line for the project; the deployment
+  address is the fallback, and a suspended line does not keep sending.
+- **NEW `PlatformEmailDomainService`** — registering a client's sending domain,
+  reading back the DNS records to publish, and reporting the provider's own
+  status verbatim. `not_started`, `pending` and `failed` are different problems
+  for whoever owns the DNS, so none of them is collapsed into a boolean.
+  Routes: `GET|POST /v1/projects/{id}/manifold/email-domains`,
+  `GET|DELETE .../{domainId}`, `POST .../{domainId}/verify`.
+- PASS, live: `obsivision.com` registered at Resend through that service,
+  id `76fb2fca-9c99-43b2-b650-53badca741fc`, status `not_started`, three DNS
+  records returned. **Blocked on DNS** — obsivision.com is at Porkbun and this
+  session holds no credential for it.
+- PASS `dart test` in `platform/server`: 396.
+- **PASS, live: the Baker catalogue is real.** Six modules created and pushed to
+  `seed/initial-modules` on `Citadel-Platform/baker-modules` (never `main`), one
+  commit each so every module has its own commit and date rather than six rows
+  sharing one. `tool/index_baker_modules.dart` read the clone and wrote
+  `bakerCatalogue/modules` in `citadel-platform`; read back through the
+  Firestore REST API, all six with resolvable commit URLs.
+- PASS the failure path too: a directory with no `module.json` is reported as
+  `not listed` rather than skipped.
+- **NEW `tool/record_baker_deployment.dart`**, and a real record for
+  `axis-education`: two applications, three releases. Read back and compared
+  against the catalogue, production runs `citadel-design-system` 2.8.0 against
+  3.0.2 and `conduit-instrumentation` 1.1.0 against 1.4.0 while staging is
+  current — the drift the Deployments tab exists to show, now visible rather
+  than hypothetical.
+
+31/08/26 17:30 — PAST THE TOKEN BOUNDARY, IN PRODUCTION
+- **NEW `_dev/scripts/mint_operator_id_token.sh`.** Every previous check of the
+  deployed API stopped at 401: it could prove a route existed and nothing about
+  what the route did. This mints a real Firebase ID token without downloading a
+  service account key — the operator holds `serviceAccountTokenCreator` on the
+  Firebase admin identity, declared in the production runtime root, and that is
+  what it exists for. Two steps, because Firebase has two kinds of token: the
+  admin identity signs a custom token, Identity Toolkit exchanges it for the ID
+  token the API verifies.
+- **PASS, live and authenticated** against revision `00031-n5m`:
+  - `GET /v1/baker/modules` returns the six real modules with resolvable commit
+    URLs. GitHub → indexer → Firestore → deployed API, end to end.
+  - `GET /v1/projects/axis-education/baker/deployments` returns two
+    applications and three releases.
+  - `GET .../palisade/policy-expiry` answers a report, not a 404.
+  - `POST .../palisade/relay-destinations` **published a real declaration** —
+    whatsapp, resend and vertex, each with a purpose written against it.
+  - Republishing revision 1 was refused with `revision must be 2`, so
+    immutability holds against the deployed service and not only in a test.
+  - A destination with a blank purpose was refused by name.
+  - `GET .../palisade/boundary-inventory` now names all three crossings as
+    `declaration revision 1`, and its `unavailable` list is empty where it used
+    to say the project declared nothing.
+- FIXED on the way: the inventory called the source a `deployment declaration`,
+  which is exactly what it had stopped being. It now names the revision, because
+  "who said this was allowed" is the question an audit asks first.
+- **NEW: the undeclared-egress declaration is published, not deployed**
+  (Feature 6.2.4, recommended path taken). `RelayDestinationDeclaration` is
+  immutable, revisioned and digest-pinned like a boundary;
+  `PlatformRelayDestinationService` holds it in the registry. A purpose is
+  required per destination — a destination nobody can justify in a sentence is
+  one nobody should have approved, and it is the text an auditor reads.
+  Publishing sits on `platform.boundaries.update`, reading on
+  `platform.watchdog.read`: the right to see a finding is not the right to
+  approve what it measures.
+- **NEW: the boundary expiry detector** (Feature 6.2.3, as decided 31/08/26).
+  `reviewPolicyExpiry` reports rules nobody dated and rules whose date has
+  passed, weighted by what they permit — third-party relay high, Citadel relay
+  medium, in-situ low, and an undated *denial* not reported at all because the
+  safe direction is noise on a page that has to stay readable. An expired rule
+  is reported whatever it permits: a published policy and an approved policy
+  that are no longer the same document is the finding.
+- PASS `dart test`: server 408, api 37.
+
+31/08/26 19:30 — MCP MOUNTED, CONSOLE SURFACES, citadel.obsivision.com
+- **The MCP endpoint is mounted**, on the recommended path. `POST
+  /v1/runs/{runId}/mcp` on the **private** runtime: who may call at all is
+  Cloud Run IAM's answer, and which run they may act for is the URL's. The run
+  id is resolved by the composer against the artifact this runtime hosts before
+  a single tool is built, so a run this runtime does not host is indistinguishable
+  from one that does not exist — telling a caller which would let them
+  enumerate an artifact's runs.
+- The security property, tested: **`thread_id` comes from the path and a
+  message body cannot reach it.** A `tools/call` naming a different run in its
+  arguments still journals against the run in the URL. The step coordinates
+  (task id, checkpoint, node) *do* come from the caller, over headers, because
+  they say where inside a run a call happened rather than whose work it is — a
+  caller lying about them can only confuse its own idempotency.
+- A missing coordinate is refused with 400 before any tool is built. The gate
+  would otherwise throw halfway through a call, which reads as the tool failing
+  rather than as the request being incomplete.
+- `buildCitadelMcpTools` serves **exactly the tools the artifact's revision
+  declares** — the declaration is what `evaluateToolInvocation` checks first,
+  so serving more would advertise a tool refused the moment it is called. A
+  declared tool this deployment cannot execute is left out rather than served
+  and failed. Retrieval configuration is read per request, not captured at
+  startup, so an operator's saved change is not quietly ignored.
+- PASS `npm test` in `citadel_core/exigence`: **882 tests, 0 failures** (7 new).
+- **NOT E2E'd against a deployment, and here is why: there is no Exigence
+  runtime deployed anywhere.** `gcloud run services list --project
+  citadel-platform` returns `citadel-arm-evidence` and `citadel-platform-api`
+  and nothing else. The SITREP's deployed-services table listed
+  `citadel-exigence-runtime`; that was wrong, and is corrected. Do not use
+  `/healthz` to check — it answers Google's 404 for services that do exist.
+- Corrected on the way: the Console seed had been given that runtime's URL
+  earlier today on the strength of the same stale table. Removed, and the
+  Manifold line tests now assert **Pending verification** for the seed project,
+  which is the true reading — nothing is listening to any seeded line.
+- **Three Console surfaces built**, against routes that were already live:
+  - **Sending domain** on the Manifold page: register a client's domain, the
+    DNS records rendered selectable because they are typed by hand into
+    somebody else's console and a mistyped DKIM key fails silently, and a
+    "Check again" button — named that rather than "Verify", because Citadel is
+    asking the provider to look and cannot promise the answer.
+  - **Expiry** on the Watchdog page: expired rules called out above the table,
+    since an expired rule and an undated one are different problems and the
+    first is the one to act on today.
+  - **Declared destinations**, also on the Watchdog page, titled with the
+    revision and who published it — "who said this was allowed" is the question
+    an audit asks first.
+- PASS `flutter test`: 396 (5 new), analyzer clean.
+- DEPLOYED the Console; **`https://citadel.obsivision.com` is live** and
+  serving it. PASS, live: CORS preflight is allowed from
+  `citadel.obsivision.com` and from `citadel-platform.web.app`, and refused
+  from an origin that is on neither list.
+- `obsivision.com` at Resend is **pending**, not verified. DKIM and MX resolve;
+  the second TXT — host `send`, `v=spf1 include:amazonses.com ~all` — returns
+  nothing from DNS and is what verification is waiting on.
+
+31/08/26 20:45 — AN EXIGENCE RUNTIME EXISTS, AND FOUR REAL DEFECTS CAME OUT OF IT
+The runtime for `demo-project` was provisioned **through the real flow** —
+Console-equivalent API call → Platform API → `citadel-provisioner` Cloud Run
+Job → Terraform → Google Cloud — driven with a minted operator token. Nothing
+was hand-deployed. Four defects surfaced, none of which any test or plan could
+have reached; each needed a real apply against a real project.
+
+1. **The provisioner image was six days stale, and silently.** The first plan
+   failed with `A variable named "artifact_authority" was assigned on the
+   command line, but the root module does not declare a variable of that name`.
+   The variable *is* declared in the repository; the deployed image, built
+   24/08, bakes the templates in and predated it. Nothing compares the image's
+   templates with the repository's, so the drift was invisible until a plan ran.
+2. **The runner and the API disagreed about which job fields are JSON.** Every
+   job then died at start-up with `$.requestVariables must be an object`,
+   before doing anything, leaving the record saying `queued` — the runner never
+   got far enough to report a failure. The API wrote `plan` and
+   `requestVariables` as encoded JSON and named both in a private
+   `_jsonStoredFields`; the provisioner kept its own copy of the read side and
+   decoded only `plan`. **Fixed by deleting one of the copies**:
+   `provisioningJobJsonFields` now lives in `citadel_platform_api`, the package
+   both sides already share, and both read it.
+3. **A single-field Firestore index asked for as a composite.**
+   `conversation_messages_by_provider_id` declared `providerMessageId` plus
+   `__name__` — and `__name__` does not count, because every composite index
+   carries the document name already. Firestore refused the whole apply with
+   `this index is not necessary, configure using single field index controls`,
+   **after thirty-three other resources had been created**. Fixed by modelling
+   it as `google_firestore_field` with a collection-group index, which is what
+   it is. Both vector indexes were innocent — proven by leaving them as they
+   were and watching them reach READY.
+4. **The current runtime image cannot boot a freshly provisioned client**, and
+   this is the serious one. Deploying it produced
+   `JournalPersistenceError: artifact revision was not found` and Cloud Run
+   rolled back. The bootstrap that publishes a client's first revision wrote
+   `exigence_configuration_versions`, `exigence_active_configurations` and
+   `exigence_artifact_registrations` — but no `exigence_artifact_revisions`,
+   which is what `resolveLatest` reads. **The already-working `demo-sandbox`
+   client has no such collection either**, so this is not a demo-project
+   problem: it is a boot requirement on HEAD that no deployed client satisfies,
+   and it would take out every client on their next upgrade. NOT FIXED —
+   recorded rather than guessed at, because publishing over a half-written
+   control plane would replace a diagnosable fault with a configuration nobody
+   chose.
+
+**Where it stands.** `cit-demo-project-5ec5-runtime` is deployed and healthy on
+revision `00001-r92`, carrying 100% of traffic on the *previous* image; the new
+revision failed its health check and never took traffic, so nothing is broken.
+- PASS, live: anonymous callers get **403**, an allowlisted identity gets
+  through — Cloud Run IAM is gating the private runtime as designed.
+- PASS, live: 7 composite indexes READY, including both vector indexes, and the
+  `messages/providerMessageId` field config that replaced the bad index.
+- The MCP endpoint answers 404 on the deployed revision, correctly: that image
+  predates the mount. It cannot be exercised until (4) is resolved.
+- `obsivision.com` remains `pending` at Resend with all three DNS records
+  resolving. Verification is asynchronous on the provider's side.
+
+31/08/26 21:30 — THE BOOT FAILURE IS A MIGRATION, AND MCP IS EXERCISED LIVE
+Following the owner's suggestion — wipe `demo-project` and let the new system
+build it from scratch — the question resolved cleanly.
+
+- The three control-plane collections were deleted, leaving the client's
+  database genuinely empty, and the runtime redeployed on the new image.
+- **It booted.** `exigence_artifact_revisions` now exists in `demo-project`,
+  written by the new image's own bootstrap, alongside
+  `exigence_artifact_registrations` and `exigence_configuration_versions`.
+  Revision `00004-k7v` serves 100% of traffic.
+- **Diagnosis, now certain: the new system is coherent and the old bootstrap
+  was incomplete.** The loader is right to require an artifact revision; the
+  old image never wrote one. Every client the old image bootstrapped —
+  `demo-sandbox` included — holds registrations and configuration versions with
+  no revision, and that is the state the new image refuses. It is a forward
+  migration, not a defect, and `ensureInitialArtifactRevision` is already the
+  function that performs it.
+- A trap worth recording: the first re-provision reported `applied` and had
+  done **nothing**. The plan was 0/0/0 — Terraform saw the service spec already
+  carrying the new image from the earlier failed apply, so no revision was
+  created and the experiment never ran. `applied` on an empty plan is not
+  evidence of a working boot; the revision list is.
+
+**PASS, live: the MCP endpoint, against a real deployment, for the first time.**
+All three properties hold in production on
+`cit-demo-project-5ec5-runtime`:
+- an anonymous caller gets **403** — Cloud Run IAM gates who may call at all;
+- an authenticated caller with no run coordinates gets **400**, naming each
+  missing header, *before* any tool is built — the gate would otherwise have
+  thrown mid-call and read as the tool failing;
+- an authenticated caller naming a run this runtime does not host gets **404**,
+  identical to a run that does not exist, so an artifact's runs cannot be
+  enumerated.
+
+Cleaned up after the diagnosis: the `CITADEL_BOOT_PROBE` env var used to force a
+revision was removed, and the three roles granted to inspect and redeploy
+(`run.admin`, `iam.serviceAccountUser`, `datastore.owner`) were revoked. The
+operator keeps `viewer` on the demo project, which they did not hold before.
+
+---
+
+## 01/09/26 — the overnight run's gates
+
+Every suite below was run at the end of the session; the numbers are the ones
+that appear in the commits.
+
+| Package | Tests | Note |
+| --- | --- | --- |
+| `citadel_core/exigence` | 920 unit (795 pass, 125 emulator-gated) | +38 for the superharness, the run step planner and the relay declaration source |
+| `citadel_core/exigence` | 131 emulator | includes an agent run surviving a process that dies mid-decision |
+| `citadel_core/platform/server` | 436 | +23 for the alert store, the Watchdog producer, the digest and the routes |
+| `citadel_core/platform/api` | 37 | alert record and codec |
+| `citadel_core/palisade/authority` | 48 | two new permissions classified |
+| `citadel_core/conduit/citadel_conduit_ingest` | 108 | +7 for alert-rule evaluation |
+| `citadel_core/conduit/citadel_conduit_sdk` | 56 | +16 for cadence and dead clicks |
+| `citadel_platform` | 407 | +11 for the alerts panel and the alert seam |
+
+`dart analyze`, `flutter analyze`, `tsc --noEmit` and the Exigence determinism
+lint are clean in every package touched.
+
+**What these do not cover, and it is the same sentence as every previous
+entry.** Nothing here has been deployed. The alert store has never written a
+document in a real Firestore, no digest has left Resend, the superharness has
+never run against Vertex, and the Conduit evaluation endpoint is served by a
+service that is not deployed. The joins that *are* covered in-process are the
+Console client against the API's routes (`platform_alert_seam_test.dart`), the
+Platform API's writer against the Exigence runtime's reader
+(`relay_declaration_repository.integration.test.ts`), and the agent's own
+journal against a real Firestore.
+
+---
+
+01/09/26 — the four answered decisions, built
+
+| Package | Tests | Note |
+| --- | --- | --- |
+| `citadel_core/conduit/citadel_conduit_ingest` | 129 | +17 geo catalogue, parser, resolver and loader; +5 the per-project switch and its round trip; −1 the retired alert-event round trip |
+| `citadel_platform` | 412 | +3 the disclaimer text, +2 the licence dialog's ask-then-record path; the alert-history table's assertions replaced by the Dashboard signpost |
+| `citadel_core/platform/customer_rules` | 4 | unchanged; the `conduit_alert_events` deny rule went with the collection |
+| `citadel_core/platform/server` | 436 | unchanged |
+| `citadel_core/platform/api` | 37 | unchanged |
+
+`dart analyze` and `flutter analyze` clean in every package touched.
+
+**Verified by deliberate construction, not by assertion.** The geo tests drive
+the whole matrix a deployment can be in — not configured, half-configured, a
+database id Citadel holds no licence text for, an unreadable file, a file with
+one bad row, a file with no good row — because the three outcomes reading the
+same is the failure this feature is most likely to have, and it is invisible
+from the data. The toggle test proves the negative case as well as the
+positive: a project with the switch off is *not asked*, so it records no
+country rather than an empty one.
+
+**What is not covered.** No real geo database exists, so nothing has resolved a
+real address — the range search is exercised against four hand-written rows.
+Nothing is deployed, so the start-up line naming the loaded database has never
+been printed by a running service. The Console dialog's download button is
+driven in a widget test that stops short of the browser, because
+`downloadTextFile` is a `dart:js_interop` blob and throws on the VM; what the
+test proves is that the switch does not move until the dialog is accepted, and
+that accepting it records which licence.
+
+**The destroy was not a test and had no dry run beyond its plan.** Three
+Terraform roots, seventy-five resources, applied against live state in
+`learning-gcp-404803`. Verified afterwards by `gcloud run services list`,
+`gcloud iam service-accounts list`, `gcloud scheduler jobs list`,
+`gcloud tasks queues list` and `gsutil ls`, each returning the live
+`demo-project` resources and nothing else, and by `gcloud services list`
+showing every shared API still enabled.

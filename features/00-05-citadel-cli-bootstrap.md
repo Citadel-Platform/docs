@@ -26,7 +26,16 @@ Establish `citadel_cli` as the first developer-facing consumer of `citadel_core`
 - Document which commands are safe scaffolds vs. real mutating flows.
 
 ## Definition of done
-- [ ] `citadel_cli` has Citadel-specific command structure
-- [ ] CLI consumes contracts from `citadel_core`
-- [ ] Rapid testing workflows exist for local/dev work
-- [ ] CLI docs are present and current
+Reviewed 30/08/26 against the tree.
+
+- [x] `citadel_cli` has Citadel-specific command structure — `contracts`,
+      `docs`, `onboarding`, `projects` and their subcommands, not the
+      generated template.
+- [x] CLI consumes contracts from `citadel_core` — it depends on
+      `citadel_core/platform/api` and `platform/customer_rules` by path rather
+      than re-declaring either.
+- [x] Rapid testing workflows exist for local/dev work — the CLI's own suite
+      (173 tests) and the Terraform state-backend tooling under
+      `citadel_cli/tool/`.
+- [x] CLI docs are present and current — `citadel_cli/README.md` documents
+      the current command set and the development workflow.

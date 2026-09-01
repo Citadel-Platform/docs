@@ -51,11 +51,30 @@ Build the Experience Monitoring module: Core Web Vitals RUM, JavaScript and API 
 - ARM integration: route `conduit.alert.fired` events to the ARM event bus so error alerts appear in ARM Console alongside application telemetry.
 
 ## Definition of done
-- [ ] CWV dashboard shows correct P50/P75/P95 values for test data sliced by device
-- [ ] JS error list groups correctly and shows stack trace in the detail panel
-- [ ] API error list shows correct error rates and links to session replays
-- [ ] Frustration dashboard shows correct signal counts and frustration heatmap
-- [ ] Synthetic probes run on schedule and record results correctly
-- [ ] Alert rules fire and deliver notifications via Slack webhook in < 2 minutes of threshold breach
-- [ ] ARM receives alert events via Pub/Sub
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] Performance percentiles are computed and sliced (`conduit_experience_test.dart`)
+- [x] Errors are grouped rather than listed one per occurrence, and the detail
+      carries the diagnostic the SDK captured
+- [x] API error rates are computed, with Conduit's own ingest traffic excluded
+      so the monitor does not report itself
+- [x] Alert rules evaluate and produce findings (`conduit_alerting_test.dart`)
+- [ ] **Delivery.** Rules fire and nothing carries the result anywhere. This is
+      the same gap Exigence's breached objectives have, and it is one decision
+      for both — see `DECISIONS_NEEDED.md`, 30/08/26
+- [ ] Synthetic probes running on a schedule
+- [ ] Errors linking through to the session that produced them
+
+### Deferred — the web pipeline
+- ARM receiving alert events via **Pub/Sub** — there is no ingest to post to,
+  which is exactly what the open decision is about
+- Slack webhook delivery specifically, as opposed to whatever the delivery
+  decision settles on
 

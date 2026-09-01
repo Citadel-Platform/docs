@@ -31,7 +31,26 @@ Create the infrastructure and data-stack baseline shared by all Citadel offering
 - Route internal product errors into ARM once ARM consolidation validates.
 
 ## Definition of done
-- [ ] Terraform validates for active environments
-- [ ] Shared data resources are documented and provisioned through Terraform
-- [ ] Secret handling is documented without committed secret values
-- [ ] Observability fields are consistent across services
+Reviewed 30/08/26 against the tree.
+
+- [x] Terraform validates for active environments — `terraform validate`
+      passes for `provisioner/templates/exigence-runtime`,
+      `provisioner/templates/exigence-agent` and
+      `citadel_cli/tool/terraform/state_backend` (30/08/26).
+- [x] Shared data resources are documented and provisioned through Terraform
+      — each client's Firestore database, payload bucket and service accounts
+      are Terraform resources in the runtime template, and the state backend
+      is itself Terraform (`_dev/docs/terraform_state_backend.md`). Nothing is
+      created by hand.
+- [~] Secret handling is documented without committed secret values — the
+      *practice* is settled and enforced: secrets are Secret Manager version
+      references pinned in configuration, never values, and publishing a
+      channel refuses a pasted token outright. **The documentation is
+      scattered** across `project_registry_contract.md`,
+      `exigence_palisade_phase_plan.md` and the verification source rather
+      than being one page somebody can be pointed at.
+- [x] Observability fields are consistent across services — the mapping is
+      written down in `_dev/docs/otel_genai_field_map.md`, including where the
+      OTel GenAI conventions have no answer (cost) and what the `citadel.*`
+      namespace covers instead. Request ids, run ids and trace ids carry
+      through the proxy, the runtime and the Console consistently.

@@ -52,11 +52,32 @@ Build the Session Replay module in the Conduit Console: the session list view, t
 - Support URL-based deep linking: `/conduit/replay/{projectId}/{sessionId}?t=120` loads and seeks to the given offset.
 
 ## Definition of done
-- [ ] Session list loads with correct data, filters, and sort
-- [ ] Replay player reconstructs a real DOM recording without visual artefacts
-- [ ] Timeline markers appear at correct positions for all event types
-- [ ] Frustration signals are visually highlighted at correct moments
-- [ ] Console and Network panels are synchronised with playback
-- [ ] Tag, star, and note operations persist across page reloads
-- [ ] Deep link URL opens the player at the specified timestamp
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+Replay in this product is a **Flutter capture surface**, not a DOM recorder:
+`conduit_replay_capture_surface.dart` and `conduit_visual_capture.dart` record
+what a Flutter app drew. The player reads those frames. A criterion about DOM
+reconstruction is a criterion about a recorder Citadel does not have.
+
+- [x] The capture surface records a session's frames and the SDK ships them
+      (`conduit_visual_capture_surface_test.dart`)
+- [x] The session list loads, filters and sorts through session search
+- [ ] The player is driven end to end against a recorded session — no test
+      reaches playback, and this is the box that matters most on this feature
+- [ ] Timeline markers, and frustration signals highlighted at the moment they
+      happened
+- [ ] Tag, star and note persist across a reload
+- [ ] A deep link opens the player at a timestamp
+
+### Deferred — the web pipeline
+- Replay player reconstructs a real **DOM** recording without visual artefacts
+- Console and Network panels synchronised with playback (both are browser
+  surfaces; the Flutter capture has no console pane to synchronise)
 

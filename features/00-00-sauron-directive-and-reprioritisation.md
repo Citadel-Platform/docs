@@ -50,7 +50,17 @@ Citadel is not a generic SaaS bet. It is the instrumented delivery platform for 
 - Terraform for any GCP resource; tags mandatory; flutter analyze / terraform validate gates unchanged.
 
 ## Definition of done
-- [ ] This file referenced from AGENTS.md session workflow
-- [ ] Reversals above recorded in DECISIONS.md with date and rationale
-- [ ] Release plan in _dev/docs/release_timeline.md re-sequenced to the priority ladder
-- [ ] Each feature file in this folder moved into _dev/features/ (replacing same-named files where applicable)
+Reviewed 30/08/26 against the tree. These are documentation and
+structure checks from the planning reset; each is verified below rather than
+assumed.
+
+- [x] This file referenced from AGENTS.md session workflow — step 0 of the
+      session workflow reads it before anything else, alongside the 14/08/26
+      section of DECISIONS.md.
+- [x] Reversals above recorded in DECISIONS.md with date and rationale — the
+      14/08/26 entry, and the 26–30/08/26 entries that reverse parts of it in
+      turn (Baker as a superdev-only Factory, Manifold replacing Intercom,
+      per-resource Data Handling for the local runner).
+- [x] Release plan in `_dev/docs/release_timeline.md` re-sequenced to the
+      priority ladder.
+- [x] Each feature file in this folder moved into `_dev/features/` (replacing same-named files where applicable)

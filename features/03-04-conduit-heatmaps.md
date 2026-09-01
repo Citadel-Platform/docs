@@ -57,12 +57,34 @@ Build the Heatmaps module: data aggregation jobs, rendering engine, all heatmap 
 - "View sessions for this field" action: opens session list filtered to sessions that interacted with that specific field and dropped off.
 
 ## Definition of done
-- [ ] Heatmap aggregation jobs run on schedule and produce correct density data
-- [ ] All heatmap types render correctly on the page screenshot with correct colour scaling
-- [ ] Scroll heatmap shows correct depth bands
-- [ ] Rage click and dead click overlays highlight correct locations
-- [ ] Filter controls reload data correctly without page refresh
-- [ ] Zone analysis shows correct per-zone metrics
-- [ ] Heatmap comparator side-by-side view works with sync scroll
-- [ ] Form heatmap shows per-field abandonment correctly
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+Heatmaps here are drawn over a **Flutter surface** — `conduit_heatmap_surface.dart`
+and `conduit_attention_region.dart` — so the unit of a heatmap is a named
+region a developer declared, not a screenshot with coordinates on it. That is a
+better answer for an app and a worse one for a website, which is the trade the
+30/08/26 review made.
+
+- [x] Attention per declared region is captured, with configurable milestones
+      emitted before completion (`conduit_attention_region_test.dart`)
+- [x] Scroll depth bands are captured, each threshold once per pageview
+- [x] The Console renders the surfaces a project has
+- [ ] Aggregation over more than one session's regions — today a region's
+      attention is read per session, and density across sessions is the point
+      of a heatmap
+- [ ] Rage click overlays land on the right region; dead clicks are not
+      detected at all (see 3.1)
+- [ ] Zone metrics, the side-by-side comparator, and per-field form
+      abandonment
+
+### Deferred — the web pipeline
+- Rendering over a page **screenshot** with coordinate-space colour scaling
+- Scheduled aggregation jobs (there is no BigQuery to aggregate in)
 

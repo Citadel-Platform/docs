@@ -29,7 +29,13 @@ Standardize communication contracts and SDK ergonomics across ARM, Conduit, Exig
 - Keep schemas versioned and migration-friendly.
 
 ## Definition of done
-- [ ] Protocol conventions are documented
-- [ ] Dart SDK conventions are documented
-- [ ] Streaming event envelope is documented
-- [ ] Product schemas have versioning guidance
+Reviewed 30/08/26 against the tree.
+
+- [x] Protocol conventions are documented —
+      `_dev/docs/shared_protocol_conventions.md`.
+- [x] Dart SDK conventions are documented —
+      `_dev/docs/shared_sdk_conventions.md`.
+- [x] Streaming event envelope is documented —
+      `_dev/docs/shared_streaming_conventions.md`.
+- [x] Product schemas have versioning guidance —
+      `_dev/docs/schema_versioning_guidance.md`.

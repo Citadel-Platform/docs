@@ -45,7 +45,7 @@ Build the server-side event ingestion endpoint, event schema validation, and the
   }
   ```
 - Validate required fields; reject events with missing `projectId`, `sessionId`, or `type`.
-- Enrich events with GeoIP-derived fields using a bundled GeoLite2 database (no external call).
+- Enrich events with a country resolved from a bundled range database (no external call). Country only: the address is truncated before the lookup.
 - Assign a server-side `receivedAt` timestamp alongside the client `timestamp`.
 
 ### Task 3.2.3 — Pub/Sub routing
@@ -74,11 +74,44 @@ Build the server-side event ingestion endpoint, event schema validation, and the
 - Build a query endpoint `POST /v1/sessions/search` that accepts filter parameters and returns paginated session metadata. This backs the session replay filter UI.
 
 ## Definition of done
-- [ ] Ingest API accepts and validates events; rejects malformed payloads with clear error codes
-- [ ] Events are routed to BigQuery within 5 seconds of receipt (streaming latency)
-- [ ] Replay chunks are stored in GCS and retrievable by sessionId
-- [ ] Pub/Sub topics exist for all routing paths including Exigence triggers
-- [ ] Session search query returns correct results with pagination
-- [ ] Rate limiting is enforced and returns 429 when exceeded
-- [ ] GeoIP enrichment populates country, region, and city fields
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] The ingest API accepts and validates events and refuses malformed
+      payloads by name rather than by silence
+      (`conduit_ingest_validation_test.dart`)
+- [x] Events are persisted to Firestore under the documented schema, which is
+      where they are read from — there is no second store to fall behind
+      (`conduit_firestore_persistence_test.dart`, `conduit_firestore_schema_test.dart`)
+- [x] Session search returns filtered, paginated results
+      (`conduit_session_search_json_test.dart`)
+- [x] Rate limiting is enforced and answers 429
+- [x] Country resolution, as everything either side of the database file
+      (01/09/26). `ConduitGeoDatabase` parses the range table every candidate
+      publishes; `IpRangeConduitGeoResolver` answers from the truncated address;
+      `loadConduitGeoDatabase` names which file the deployment carries and
+      distinguishes "none configured" from "configured and broken"; the switch
+      is per project and the Console records which licence was accepted.
+- [ ] A database file. None is bundled, because no licence has been taken, so
+      every session still reads as having no country rather than a wrong one.
+      Procurement rather than code — see `CONDUIT.md` C0 and the catalogue in
+      `conduit_geo_databases.dart` for the three candidates and their terms.
+- [ ] Region and city are **not** coming. No range table resolves them from a
+      network address, and the last octet never reaches storage.
+- [ ] Proven against a real client project rather than the emulator
+
+### Deferred — the web pipeline
+Not outstanding. BigQuery, Pub/Sub and GCS replay chunks are the analytics
+infrastructure the 30/08/26 review deferred; Firestore is the store, and
+routing is a direct call rather than a topic.
+
+- Events routed to BigQuery within 5 seconds (streaming latency)
+- Replay chunks stored in GCS and retrievable by sessionId
+- Pub/Sub topics for all routing paths including Exigence triggers
 

@@ -167,7 +167,7 @@ Build the server-side event ingestion endpoint, event schema validation, and the
 - [ ] Pub/Sub topics exist for all routing paths including Exigence triggers
 - [ ] Session search query returns correct results with pagination
 - [ ] Rate limiting is enforced and returns 429 when exceeded
-- [ ] GeoIP enrichment populates country, region, and city fields
+- [x] Country resolution built (01/09/26), database file not yet obtained. Region and city are not resolvable from a truncated address and are not coming.
 
 ---
 

@@ -53,10 +53,65 @@ contracts own logic and mutation; the Flutter application composes them.
   long-running job recovery; fixtures do not fabricate provider semantics.
 
 ## Definition of done
-- [ ] Starter counter app is replaced
-- [ ] Platform console uses GCP-style navigation
-- [ ] All offerings have central launch surfaces
-- [ ] `flutter analyze` passes for `citadel_platform`
-- [ ] Every supported resource/action is visible and manageable from the Console
-- [ ] Guided external steps verify completion from the live provider
-- [ ] Browser E2E proves a project can be created and fully managed without CLI/manual scripts
+Reviewed 30/08/26. The first four had been true for a long time and were
+never ticked.
+
+- [x] Starter counter app is replaced — nothing of the Flutter template
+      remains; `citadel_platform` boots into the Console shell.
+- [x] Platform console uses GCP-style navigation — responsive Material 3
+      shell with a top bar, navigation rail and drawer, product directory,
+      project selector and session menu, and both mobile and desktop web
+      layouts work (`platform_shell.dart`, `platform_workspace_shell_test.dart`).
+- [x] All offerings have central launch surfaces — ARM, Conduit, Exigence,
+      Manifold, Palisade and Baker each have a launch page and their own
+      routes under it (`citadel_platform_app.dart`).
+- [x] `flutter analyze` passes for `citadel_platform` — clean, and the 363-test
+      Console suite passes with it.
+- [~] Every supported resource/action is visible and manageable from the
+      Console — the resource inventory shows intended and observed state and
+      distinguishes unavailable, permission-denied, stale, drifted, absent and
+      healthy rather than collapsing them into "not configured", with each
+      problem linked to the operation that repairs it (Task 2.1.5, built).
+      Project creation, onboarding, provider connection, Terraform
+      plan/apply, artifact publication, channel publication, runner
+      credentials, boundaries, grants and roles are all Console operations.
+      **Not yet:** Baker's Devstation operations, which are not built; and a
+      project's declared relay destinations, which are a deployment variable
+      rather than something an operator can set.
+- [x] Guided external steps verify completion from the live provider — the
+      pattern is enforced rather than encouraged: publishing a WhatsApp
+      channel verifies the access token, WhatsApp Business Account and phone
+      number against Meta before anything is written, and a deployment that
+      cannot reach Meta refuses to publish rather than publishing unverified
+      (`platform_manifold_verification.dart`). It is also honest about what it
+      cannot prove — the verify token and app secret can only be read, and it
+      says so instead of showing three green ticks.
+- [ ] Browser E2E proves a project can be created and fully managed without
+      CLI/manual scripts — **not built.** The Console harness drives the
+      127.0.0.1:8792 seed build for individual screens; a full
+      creation-to-verified-offerings run needs the signed-in build, which
+      cannot currently be scripted.
+
+## Task 2.1.8 — Feature-set review changes (NEW 30/08/26)
+
+Applied from `_dev/docs/feature_set_review_30_08_26.md`. Recorded here because
+they cut across products and would otherwise be invisible from the Console's
+own feature file.
+
+- **Palisade → Your authority** removed; **Roles** is a table with the built-in
+  three locked; the **Boundaries** publish form states what it decides, that
+  revisions are immutable, and the rule grammar.
+- **Manifold → Channels** is now **Communication lines**, one row per line
+  rather than per revision, with **Add line**.
+- **Conduit → Instrumentation** is now **Touchpoints**, a configuration screen
+  whose toggles write, with the old path redirecting.
+- **ARM → Alerting** drops Snoozes, renames Incidents to Issue fingerprints,
+  gives Notification channels their own table, rebuilds the policy form as
+  conditions → tags → channels, adds a Tags column to fingerprints and a
+  criticality dropdown to case logs.
+
+Still outstanding from that review, each specified in its own feature file:
+ARM Tickets (1.5), Exigence MCPs and the Superharness (4.7), Baker's tab set
+(5.4), Conduit multiple targets (3.1.6) and dashboard declutter (3.6.5),
+custom Palisade roles (6.1.7), Watchdog infrastructure scanning (6.2.6), and
+Manifold Email lines (7.1.5).

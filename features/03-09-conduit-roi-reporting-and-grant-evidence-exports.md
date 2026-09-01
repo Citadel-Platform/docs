@@ -52,8 +52,26 @@ SME clients funded through grants must report measurable outcomes (cost/time sav
 - _dev/docs page mapping each template section to typical PSG/EDG/EDGE reporting asks (productivity gains, digitalisation adoption, before/after baselines), maintained as grants evolve. [OPEN: confirm exact evidence fields with the first grant-funded client's approval letter; record in DECISIONS.md.]
 
 ## Definition of done
-- [ ] Monthly report generates on schedule for the pilot project with real data and source footnotes on every figure
-- [ ] Grant evidence pack renders baseline vs current with pinned windows; no fabricated values possible (missing data ⇒ explicit gaps)
-- [ ] Case-study extract respects consent flag and anonymisation
-- [ ] Reports stored client-side with retention config honoured; Citadel keeps pointers only
-- [ ] flutter analyze zero warnings; report job covered by an integration test with emulator data
+
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] `flutter analyze` is clean, and the Console renders the reports route
+- [ ] A monthly report generated on a schedule for a real project, with a
+      source footnote on every figure
+- [ ] The grant evidence pack: baseline against current over pinned windows,
+      with missing data shown as an explicit gap rather than an interpolated
+      number. **This is the box to protect** — a report that quietly fills a
+      hole is worse than no report, because somebody submits it
+- [ ] Case-study extraction honouring the consent flag and anonymising
+- [ ] Reports stored client-side with retention honoured, Citadel holding
+      pointers only
+- [ ] The report job covered by an integration test against emulator data
+
+None of this is deferred; it is unbuilt, and it sits downstream of the
+analytics it reports on.

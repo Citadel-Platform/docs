@@ -37,9 +37,36 @@ Build the Web Analytics Overview module: a first-party traffic analytics dashboa
 - Summary: new visitor rate, returning visitor rate, avg. sessions per returning visitor.
 
 ## Definition of done
-- [ ] All aggregation queries produce correct daily metrics for test project data
-- [ ] Overview dashboard renders all widgets with correct data
-- [ ] Real-time visitor count updates without page refresh
-- [ ] Traffic source breakdown correctly classifies UTM-tagged and organic sessions
-- [ ] Top pages table links correctly to the Heatmaps module
 
+Rewritten 31/08/26 against the product that exists — a Flutter/Dart SDK and a
+Dart ingest service on Firestore — rather than the web SDK and BigQuery
+pipeline these criteria were first written for. The originals are kept below
+under **Deferred**, because they are a product decision that was made, not work
+that was dropped: the product-owner review of 30/08/26
+(`_dev/docs/feature_set_review_30_08_26.md`) settled Conduit as Flutter/Dart
+first with analytics infrastructure deferred.
+
+- [x] Daily metrics are computed from stored sessions
+      (`conduit_analytics_test.dart`)
+- [x] The overview renders its widgets from those metrics
+- [ ] A live visitor count that updates without a refresh
+- [ ] Traffic source classification — UTM-tagged against organic. The fields
+      arrive; nothing classifies them
+- [ ] Top pages linking through to the matching heatmap surface
+
+### Deferred — the web pipeline
+- Aggregation expressed as scheduled **queries** rather than as a computation
+  over Firestore documents
+
+
+## Task 3.6.5 — Dashboard declutter (NEW 30/08/26)
+
+From the feature-set review: the overview page carries long descriptive panels
+about SDK capability alongside the numbers. Those belong in documentation, not
+on the screen somebody opens to find out how the product is doing.
+
+Keep: metrics, charts, summaries, the numbers that matter. Remove the
+capability prose.
+
+- [ ] The overview page is metrics, charts and summaries with no reference
+      material on it
