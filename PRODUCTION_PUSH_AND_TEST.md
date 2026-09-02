@@ -965,21 +965,67 @@ Likely `test-sandbox` configuration rather than platform code: the runtime's
 root. That is the boundary-pattern trap F-018 is about. **Not confirmed**, for
 the reason below.
 
-### F-030 · P1 · A failed step says nothing about why it failed
+### F-030 · P3 · A failed run does not point at the record that explains it
+_(Rewritten. The first version of this said nothing anywhere explains a failed
+step. That was wrong, and wrong because of my own bad probe — I asked for
+`/exigence/audit` and `/exigence/watchdog`, neither of which is a route. The
+real one is `/v1/projects/{id}/exigence/runs/{runId}/audit-events`, it is
+proxied by the Platform API, and it answers 200 with a complete and legible
+account.)_
 
-**Did:** Triggered `exigence.reference.summary` on `test-sandbox`. Step 1
-failed.
-**Saw:** The run record carries `status: failed`, `durationMillis: 987`,
-`retryCount: 0`, **`attempts: []`** and **`failure: null`**. `activities` is
-empty. No route answers for the step's detail —
-`/exigence/runs/{id}/steps/{stepId}`, `/exigence/audit`,
-`/exigence/watchdog` are all 404, and `/exigence/data-flows` is a 400. The
-client runtime's Cloud Run log holds only `httpRequest` entries: it emits no
-application log for a step failure at all.
-**Expected:** a failed step names what it tried and what refused it. This is
-the one thing an operator needs and there is nowhere to get it — not the
-Console, not the API, not the logs. It is also what stopped this session
-confirming the boundary diagnosis above, so it costs debugging time
-immediately, not hypothetically.
-**Needs:** populate `attempts` with the error on a failed step, set the run's
-`failure`, and emit a structured log line from the runtime when a step fails.
+**Did:** Read a failed run through the API.
+**Saw:** The run record carries `status: failed` with `failure: null`,
+`attempts: []` and `activities: []`. The reason is one route away and nothing
+on the run says so.
+**What the audit actually gives**, for the run below — this is good, and it is
+the thing to surface rather than rebuild:
+```
+tool.permission.allowed          fetch      granted via direct
+tool.permission.allowed          summarise  granted via direct
+tool.permission.approval_required write     "permitted but requires a person"
+approval.approved                 write     + the approver's note
+tool.permission.denied            notify    missing exigence.communications.send
+```
+**Needs:** set the run's `failure` from the terminating audit event, and link
+the Console's run view to the audit. Not a P1 — the information exists and is
+one documented call away.
+
+### F-031 · P1 · A provisioned runtime's own automation can never run
+
+**Did:** After the F-027 fix landed, triggered `exigence.reference.summary` on
+`test-sandbox` — the reference automation the `exigence-runtime` template
+deploys and configures.
+**Saw:** `tool.permission.denied` on step 1 — *"The artifact holds no authority
+on this project."* `automation.reference` had **no grant**, and was **not a
+registered Palisade identity at all**: `palisade_identities` held
+`artifact.superharness` and the two humans, nothing else. Granting the
+capability through the API was not enough on its own; the identity has to
+exist, which needs `tool/provision_artifact_identity.dart`.
+**Expected:** provisioning deploys the runtime, configures the reference
+artifact, lists it in the Console as an enabled automation with a manual
+trigger — and it cannot execute a single step. Every new client hits this, and
+nothing says which of the two missing pieces is missing.
+**Needs:** the `exigence-runtime` provisioning run should register the identity
+of every artifact it configures and grant it the capabilities that artifact's
+declared tools require. Same class as F-026: a build that finishes and leaves
+the operator one undocumented step short of a working product.
+
+### RUN MACHINERY — VERIFIED END TO END, 02/09/26
+
+After registering `automation.reference` and granting it
+`exigence.tools.read`, `exigence.tools.write` and `exigence.communications.send`:
+
+`run-4ea72d62fe137f3974cbfa1a137e6d453106e512d434372c00866597e9a2ec25`
+**succeeded** — all four steps, through a real human approval gate:
+
+| Step | Result |
+|---|---|
+| `fetch` | succeeded, 1.7s |
+| `summarise` | succeeded, 2.8s |
+| `write` | held for approval → approved through the API → succeeded |
+| `notify` | succeeded |
+
+So the following are now proven on real infrastructure, not inferred: run
+creation, multi-step self-delivery over Cloud Tasks, the tool permission gate
+(allow, approval-required and deny all three observed), the approval hold and
+resolution, the audit trail, and F-027's warm instance underneath all of it.
