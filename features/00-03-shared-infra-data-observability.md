@@ -94,9 +94,18 @@ material.
 
 ### Subtasks
 
-- **0.3.6.a** Client project onboarding: take an operator-supplied project id,
-  authorise as the operator, create service accounts, grant roles, link
-  billing. APIs enabled per service as each is toggled on, not up front.
+- **0.3.6.a** — **NOT BUILT.** Client project onboarding: take an
+  operator-supplied project id, authorise as the operator, create service
+  accounts, grant roles, link billing. APIs enabled per service as each is
+  toggled on, not up front.
+
+  Not started rather than half-built. It is an OAuth consent flow, a token
+  exchange, server-side use of a human's credentials to create service accounts
+  and grant IAM, and audit stamping that says Citadel acted as the operator —
+  and a half-finished credential path is worse than none, because the half that
+  exists looks like it works. See the risk recorded against it in DECISIONS.md
+  02/09/26; the safer shape is still the operator granting Citadel's own
+  service account the roles it needs on their new project once.
 - **0.3.6.b** Replace `arm-data-plane` with a client data-plane template that
   creates `(default)` plus the `citadel-*` databases the enabled services need.
 - **0.3.6.c** Move ARM off `(default)`: `ArmProjectTarget.databaseId` becomes
@@ -113,11 +122,39 @@ material.
   stops being a platform constant, `run_host_suffix` stops being derivable
   once, and the `client-host` root's `projectIamAdmin` containment note stops
   applying.
-- **0.3.6.g** Migration for `test-sandbox` and `axis-education`, which hold
-  data under the old topology.
+- **0.3.6.g** — **NOT BUILT.** Migration for `test-sandbox` and
+  `axis-education`, which hold data under the old topology.
+
+  Not needed yet, and deliberately not pre-emptive: every database name is now
+  a per-client setting that defaults to the new value, so both clients keep
+  reading the databases their records are actually in. Nothing is broken and
+  nothing has moved. Migrating means copying documents between databases and
+  repointing the record, which is a data move that wants its own plan and its
+  own verification rather than being folded into the change that made it
+  possible.
 
 ### Open question
 Whether `citadel-palisade` holds evidence only. Palisade's authority records
 decide who may do what and must stay in the control plane — a client project
 whose principals could rewrite their own grants would have no authority model
 at all. Read as evidence pending confirmation.
+
+### Built, 02/09/26
+
+| | |
+|---|---|
+| 0.3.6.b | `client-data-plane` replaces `arm-data-plane`; `(default)`, the client's environment databases, and one `citadel-*` per enabled product |
+| 0.3.6.c | ARM reads `citadel-arm`; `armDatabaseId` exported from the SDK |
+| 0.3.6.d | Exigence on `citadel-exigence`; Manifold on `citadel-manifold` with its own IAM binding |
+| 0.3.6.e | `environment` on ARM records, the capture request and both list filters |
+| 0.3.6.f | `host_project_id` and `run_host_suffix` resolved per client from the record; the suffix read back off the address a deploy produced; `client-host` applied per client project |
+
+Every database name defaults to the new value and is overridable per client, so
+a client onboarded before the split keeps reading the records they have.
+Repointing them at an empty database would report that they have none, which is
+the worst way for a migration to go wrong.
+
+**Known incomplete:** `manifoldSecretProjectId` still names the shared project.
+The receiver grant check answers correctly for a pre-split client and would look
+in the wrong project for a post-split one. Threading the client's project
+through the verifier, the secret watchdog and two proxy routes is the piece left.
