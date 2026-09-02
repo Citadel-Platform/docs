@@ -356,27 +356,31 @@ Ready; finalizing (repair apply, F-020/F-023/taint fought through).
   `exigence.reference.summary`.
 - ❌ **An Exigence run cannot complete on `test-sandbox`** — every step
   delivery to the client runtime is aborted by Cloud Run: "no available
-  instance" (F-027). `learning-gcp-404803` is capacity/quota-constrained for
-  Cloud Run right now — the same thing stalling provisioner Jobs 5–12 min
-  (F-019). A run was created after 9 retries and failed at step 1. **This is
-  GCP infra in that project/region, not Citadel** — but it blocks the run /
-  approval / agent-loop / KB-sync tests. `obsidian.infinitum` can't raise the
-  quota or set min-instances (viewer only on that project).
+  instance" (F-027). **Root cause re-diagnosed 02/09: this is a Citadel infra
+  bug, not GCP capacity** — the `exigence-runtime` module deploys the client
+  runtime `min_instance_count = 0` + `cpu_idle = true`, which starves an async
+  multi-step agent runtime (see F-027 for the log evidence). A run was created
+  after 9 retries and failed at step 1. Fixable in ~4 lines of Terraform +
+  a provisioner rebuild; no GCP owner involved.
 
-### What's NOT done / needs the operator
-- **Cloud Run capacity on `learning-gcp-404803`** — the blocker for Exigence
-  runs. Needs the project owner (`siddharth.chitikela@gmail.com`) to check the
-  Cloud Run CPU quota / request an increase, or set the runtime min-instances
-  to 1. Until then, run / approval / schedule / KB-sync / agent-loop testing
-  can't proceed on test-sandbox.
-- **Firebase on `learning-gcp-404803`** — same owner. Blocks ARM/Conduit
-  **data-plane** testing (F-024).
+### What's NOT done
+- **F-027 scaling fix** — the blocker for Exigence runs. `min_instance_count = 1`
+  + `cpu_idle = false` in `citadel_core/exigence/infra/modules/runtime/main.tf`,
+  rebuild + redeploy `citadel-provisioner`, re-provision test-sandbox. Then
+  run / approval / schedule / KB-sync / agent-loop testing can proceed. Not
+  started — ~30-min cycle (F-019 job lag), touches a repo another agent has
+  open (on `main.tf`, which they haven't touched).
+- **ARM/Conduit data plane** — no provisioning template exists (F-028). Needs
+  an `arm`/`conduit` template or a Firebase block in `client-host`, plus the
+  provisioner SA holding `firebase.admin` on the client project. Enabling
+  Firebase on `learning-gcp-404803` by hand needs the owner *once* only
+  because that template gap exists (F-024).
 - **Sample Superharness agent runtime** — the `exigence-agent` template, the
   publish tool, the `artifact.superharness` identity and its published config
   are all in place; the agent's own `exigence-runtime`-style deployment was not
   applied this session (another ~30-min provisioning cycle under F-019).
-- **F-016 / F-022 / F-023 / F-021 / F-018 / F-017 / F-026** — documented, not
-  fixed (Console + server changes, or procurement).
+- **F-016 / F-022 / F-023 / F-021 / F-018 / F-017 / F-026 / F-027 / F-028** —
+  documented, not fixed (Console + server + infra changes).
 
 ---
 
@@ -774,9 +778,11 @@ ARM evidence service can't connect and the Platform API forwards a 502.
 connected — connect the client's Firebase" (the setup plan's own state), not a
 gateway error. `arm/alerting` (registry-backed) correctly returns 200.
 **Needs:** the ARM proxy path distinguishes "client project unreachable" from a
-real 5xx and returns a `describeFailure` body. Also: `test-sandbox`'s ARM/Conduit
-data plane can't be fully tested until Firebase is added to `learning-gcp-404803`
-(needs `siddharth.chitikela@gmail.com`, the project owner).
+real 5xx and returns a `describeFailure` body. Also — the deeper gap, see F-028:
+nothing provisions Firebase on the client project, so ARM/Conduit have no data
+plane to reach. Enabling Firebase on `learning-gcp-404803` needs the project
+owner *once* only because the provisioner SA has no client-host template that
+would do it; the SA itself already has the access.
 
 ### F-025 · P1 · Watchdog sweep 500s on a non-identity audit actor
 **Did:** `POST /v1/projects/test-sandbox/alerts/sweep`.
@@ -801,15 +807,55 @@ tells them.
 {enabled:true, citadelMcpEnabled:true, runtimeBoilerplate:"superharness"}` —
 the F-004 route. After that: `exigence/{approvals,knowledge-base,billing}` → 200.
 
-### F-027 · NOTE · Client runtime cold-start returns 500/502 (Cloud Run capacity, learning-gcp today)
+### F-027 · P1 · Client Exigence runtime scales to zero + throttles CPU → runs never complete
 **Did:** Called `/exigence/{automations,runs}` on the freshly-provisioned
-`test-sandbox` runtime.
+`test-sandbox` runtime; triggered a reference-automation run.
 **Saw:** intermittent 500 "The request was aborted because there was no
-available instance" (Cloud Run) → forwarded by the Platform API as 502
-"invalid response". `GET` succeeded on retry 1; `POST /runs` needed several.
-`min_instance_count = 0` + Cloud Run capacity pressure in `learning-gcp-404803`
-on 01/09. Not code — but the Platform API marking these `retryable: true` (it
-does) and the Console retrying once would smooth it.
+available instance" (Cloud Run) → forwarded by the Platform API as 502. `GET`
+succeeded on retry 1; `POST /runs` needed several; the run was created after 9
+retries and then **failed at step 1** — the runtime's self-enqueued step
+delivery hit "no available instance".
+**Root cause (verified in logs 02/09):** `citadel_core/exigence/infra/modules/runtime/main.tf`
+deploys the client runtime with `scaling { min_instance_count = 0 }` and
+`resources { cpu_idle = true }`. Instances *do* start ("Default STARTUP TCP
+probe succeeded after 1 attempt" in the logs) — this is **not** a GCP quota or
+capacity problem (the webhook receiver on the same project stays Ready). But
+the runtime bootstraps async (named-Firestore connect, artifact-revision load,
+LangGraph compile) and then drives multi-step runs via self-enqueued Cloud
+Tasks callbacks. Scale-to-zero + `cpu_idle` starves that: between the run
+kickoff and step 1's callback the instance is idle → CPU-throttled → recycled,
+so the callback lands on nothing.
+**Expected:** an AI-agent runtime that holds in-memory graph state and
+processes background steps is not a scale-to-zero request/response workload. It
+should stay warm.
+**Needs:** in `modules/runtime/main.tf` (the runtime container only — leave the
+webhook `receiver` block scale-to-zero): `min_instance_count = 1` and
+`cpu_idle = false`. Then rebuild + redeploy the `citadel-provisioner` image
+(templates are baked in) and re-provision. ~4 lines; no GCP owner, no quota
+request. Secondary: the Console retrying once on the API's `retryable: true`
+would smooth the cold-start window that remains.
+
+### F-028 · P1 · No per-client provisioning path for ARM or Conduit (and no Firebase)
+**Did:** Looked for how a client's ARM / Conduit data plane is stood up when
+Citadel onboards them. Checked `platform/provisioner/templates/` and
+`platform/infra/environments/production/{client-host,customers/*}`.
+**Saw:** the only provisioning templates are `exigence-runtime` and
+`exigence-agent`. `exigence-runtime` creates the client's Firestore database
+(`google_firestore_database`, `FIRESTORE_NATIVE`) — so Exigence has a data
+plane — but **nothing anywhere runs `google_firebase_project` /
+`google_firebase_web_app`**, and there is no ARM or Conduit template at all.
+The `customers/test-sandbox` root only sets IAM + a custom observer role.
+**Expected:** the platform premise (confirmed by the operator) is that a
+Citadel user with the right Citadel permissions is sufficient — Citadel's
+provisioner SA ensures the GCP side. A client who buys ARM or Conduit should
+get their data plane (Firebase project + web app + Firestore rules/indexes)
+provisioned by the same plan→approve→apply flow as Exigence.
+**Needs:** (1) an `arm` and/or `conduit` provisioning template, or extend
+`exigence-runtime`/`client-host` to provision Firebase; (2) the provisioner SA
+holds `firebase.admin` (or equivalent) on the client project — granted once at
+project-claim time, same as its other roles. The *only* unavoidable
+owner-touch is that first claim-time grant of the SA onto a client's own GCP
+project; everything after is Terraform the SA runs.
 
 ### F-017 · NOTE · No API/Console way to retire a client project
 **Did:** Looked for a `DELETE`/retire route for `platform_projects`.
@@ -822,3 +868,64 @@ distinction AGENTS.md is emphatic about — should be a guided Console flow.
 **Needs:** a retire flow (mark the record retired, list what infra still
 exists, guide the Terraform destroys, then remove the record).
 
+---
+
+## SESSION 2 — 02/09/26, `claude-opus-5`
+
+Operator instruction: fix the findings above and deploy everything to
+production.
+
+### Fixed and shipped
+
+| Finding | Sev | What changed |
+|---|---|---|
+| **F-027** | P1 | `exigence/infra/modules/runtime/main.tf` — the client runtime keeps `min_instances = 1` (new variable) and `cpu_idle = false`. The receiver stays scale-to-zero. Module test file repaired (it predated three required variables and had not run) and now asserts both. |
+| **F-029** (new) | P1 | The provisioner runner wrote `offeringScope.exigence.runtimeUrl` for **every** template. `exigence-agent` emits a `cloud_run_uri` too, so provisioning an agent would have repointed the whole project at a runtime serving one artifact — the client's Exigence would have gone dark silently. Gated to `exigence-runtime`. |
+| **F-026** | P2 | The runner now sets `offeringScope.exigence.enabled` with the deployment, both directions. A successful build no longer leaves every Exigence route 403. |
+| **F-016 / F-022** (server) | P2 | The product proxy answers **409 `failedPrecondition`**, not retryable, when a project has no runtime — instead of a retryable 503 that the Console showed as an outage. |
+| **F-022** (Console) | P2 | The Watchdog page no longer branches wholesale on the Exigence-backed refusal report. Every other section renders; the missing one shows its failure in place. |
+| **F-024** | P2 | ARM: a client project with no Firestore is `failedPrecondition` (412), not `unavailable` (→ 502). Names the step: connect the client's Firebase. |
+| **F-018** | P2 | New `platform/server/tool/publish_data_handling_boundary.dart` — the third boundary tool that did not exist. Both boundary tools now refuse a relative path pattern and print the absolute form. |
+| **F-009** | P2 | `/palisade` redirects to `/palisade/access`, preserving `?project=`. |
+| **F-010** | P2 | "Add identity" on Palisade → Access. The grant route was already an upsert; the Console just had no way in. |
+| **F-005** | P2 | Setup-check failures go through `describeFailure`. `condenseSetupError` removed. |
+| **F-021** | P3 | Stale `exigence_service_url` copy replaced in the Exigence gate and the setup plan. |
+| **F-003 / F-007 / F-008** | P3 | Wizard: `help` is a **required** constructor parameter on every field (a test asserts none echoes its label); Region is a select; the registry Firebase id follows the GCP id until edited; the saved slug is shown live; the whole `firebaseConfig` can be pasted and parsed. |
+| — | — | **Console cost disclosure** updated for F-027: Cloud Run moves from "Free when idle" to a **$46/month floor** per client. A panel quoting $0.10 for something that costs $46 is worse than no panel. |
+| — | — | `citadel_core/cloudbuild.evidence.yaml` added — `--tag` cannot build the ARM image (Dockerfile is not at the context root). |
+| — | — | Hosting config moved to `citadel_platform/firebase.json`. `firebase-tools` 14 refuses a `public` path outside the config's directory, which is what actually blocked last session's Console deploy — not the login. |
+
+### The Console deploy blocker, resolved
+`firebase-tools` **does** use ADC: `GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/application_default_credentials.json firebase deploy`.
+No `firebase login` and no service-account key needed. Use the installed
+`/usr/local/bin/firebase` (14.8.0) — `npx firebase-tools` fails on this Node.
+
+### Gates, all green before the push
+`dart analyze` 14 packages clean · `flutter analyze` clean · `tsc --noEmit` clean.
+CLI 173 · ARM svc **34** · Conduit ingest 132 · Palisade 48 · Platform api 37 ·
+Platform contracts 4 · customer_rules 4 · **Platform server 449** · provisioner 13 ·
+**Console 429** · exigence 799 (125 emulator-gated) · runtime module tftest 1.
+
+### Also committed (authored in the parallel effort, left uncommitted)
+`modules/conduit` + `cloudbuild.conduit.yaml` + the `runtime` root wiring
+(already applied to production); the Conduit ingest env contract; the Manifold
+email line's inbound webhook. Committed so the repositories describe what is
+deployed rather than trailing it.
+
+### STILL NOT DONE — deliberately
+- **F-028** — no per-client provisioning path for ARM or Conduit, and nothing
+  anywhere runs `google_firebase_project`. This is the root cause behind F-024
+  and behind `test-sandbox` having no ARM/Conduit data plane. It needs a new
+  template, a `firebase.admin` grant on the provisioner SA at claim time, and
+  an apply against a real client project. Writing it blind and shipping it
+  unapplied would be worse than the documented gap.
+- **F-023** — the Manifold receiver is deletion-protected with no console path
+  to remove it. Turning Manifold off for a client still cannot be done from the
+  Console.
+- **F-017** — no retire-a-client flow.
+- **F-001 / F-002** — the provider reconciliation panel's expectation set is
+  still the host project's, so every client shows several scary "Absent" rows.
+- **Phase 3 proper** — re-running the whole feature pass against `test-sandbox`
+  on this build. F-027's fix has been deployed to the provisioner but
+  `test-sandbox`'s runtime has **not been re-provisioned onto it**, so an
+  Exigence run there is still expected to fail until it is.
