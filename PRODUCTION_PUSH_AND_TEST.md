@@ -1187,3 +1187,33 @@ gcp-firestore        absent     <- true: learning-gcp-404803 has no default
 - **F-023 needs a re-provision to reach `test-sandbox`.** Its receiver is still
   deletion-protected from the earlier apply; the template change only lands on
   the next `exigence-runtime` build.
+
+### Third pass — 02/09/26
+
+- **F-017 completed.** The route shipped with nothing to call it, so retiring
+  was still a Firestore edit. "Retire client" now sits under the project's
+  identity fields and apart from them — it is the one control on that dialog
+  that is not a setting. Two round trips on purpose: the first is refused by
+  the API with the list of surviving infrastructure, and *that* list is what
+  the confirmation shows, so the warning and the service cannot disagree about
+  what a client actually has. A client with nothing deployed skips the
+  confirmation entirely; a ceremony with an empty list in it teaches operators
+  to click through the one that matters.
+- **F-028 prerequisite applied.** `client-host` against `learning-gcp-404803`,
+  `3 added`: `firebase.googleapis.com`, `firebaserules.googleapis.com` and
+  `roles/firebase.managementServiceAgent` for the provisioner. All reversible.
+  **No Firebase project was created** — that is `arm-data-plane`, and it stays
+  the operator's call. It is now a single approve away.
+- **F-023 re-provision** of `test-sandbox` started, to land the unprotected
+  receiver on the client that already had a protected one.
+
+Console **435** tests, deployed and hash-verified against the local build.
+API `00037-qf6`.
+
+### The remaining known gap
+F-030's runtime half is committed but not deployed: the Platform API and the
+Console carry the `failure` field, and `test-sandbox`'s runtime will not emit
+one until the exigence image is rebuilt and the client re-provisioned onto it.
+That image also carries the parallel effort's Manifold email work — committed,
+`tsc` clean, 801 tests — so rebuilding it deploys both. Worth doing as one
+deliberate step rather than folded into another change.
