@@ -1217,3 +1217,17 @@ one until the exigence image is rebuilt and the client re-provisioned onto it.
 That image also carries the parallel effort's Manifold email work — committed,
 `tsc` clean, 801 tests — so rebuilding it deploys both. Worth doing as one
 deliberate step rather than folded into another change.
+
+### F-023 — VERIFIED FIXED, 02/09/26
+`test-sandbox` re-provisioned. The plan was `0 add, 1 change, 0 destroy` — the
+receiver and nothing else — and Terraform state now reads:
+
+```
+cit-test-sandbox-b82c-receiver   deletion_protection = false
+cit-test-sandbox-b82c-runtime    deletion_protection = true
+```
+
+which is the split the fix is about: the service that holds nothing can be
+removed, the one that carries a client's runs cannot. Manifold can now be
+turned off for this client. Both services Ready, and the runtime kept its
+F-027 settings through the apply (`minScale 1`, `cpu-throttling false`).
