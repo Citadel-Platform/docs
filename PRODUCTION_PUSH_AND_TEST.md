@@ -1064,3 +1064,83 @@ Both provisioning templates resolve `artifact_authority`, so `exigence-agent`
 gets the same check as `exigence-runtime`.
 
 Server 452 tests (+3).
+
+---
+
+## SESSION 2, SECOND PASS — the rest of the findings
+
+### F-001 / F-002 — FIXED
+The reconciliation observer was listing Cloud Run services, Cloud Run Jobs and
+service accounts **in the client's project** and looking there for the Platform
+API, the ARM evidence service, their two service accounts and the Terraform
+runner. Those are one deployment shared by every client and they live in
+`citadel-platform`. It even asked whether the client project held
+`citadel-platform-api@<the client>.iam.gserviceaccount.com` — an address that
+has never existed anywhere. So the panel was right, about the wrong project,
+for every client.
+
+Those lookups now target the host project and the nodes say whose they are.
+And there is a node for the thing the client actually owns: its own Exigence
+runtime, from the address the provisioner records, checked live in the client's
+project. When the two disagree it says so — the registry routing a project
+somewhere nothing answers is the drift F-001 asked to be made first-class,
+rather than "absent".
+
+### F-023 — FIXED
+The Manifold receiver is no longer deletion-protected, so Manifold can be
+turned off. Protection exists to stop an apply losing something that cannot be
+recreated; the receiver holds nothing — it verifies a signature and hands the
+message to the private runtime, where the conversation and the media live. The
+private runtime and the secrets keep theirs, and the module test asserts the
+split rather than leaving it to be read.
+
+### F-017 — FIXED
+`POST /v1/projects/{id}/retire`, gated on `platform.projects.update`.
+
+A POST, not a DELETE, because nothing is deleted. The record is marked
+`archived` with who and when; the runtime address, grants and offering scope
+all survive, because a record that forgot where the runtime was would leave
+infrastructure nothing could find its way back to.
+
+The one mistake this flow can cause is a client who looks closed and is still
+being billed, so a project with live infrastructure is **refused** with a 409
+naming what keeps running — the runtime and its queue and scheduler, the
+Manifold receiver and its media bucket, the client's Firestore database and
+payload bucket. Named, not counted. The second attempt carries
+`acknowledgeRemaining`.
+
+### F-030 — FIXED
+The driver had the gate's sentence and was throwing it away: `onDenied` took
+the run id and dropped the denial string beside it. It now carries it,
+`failRun` records it on the run, the Firestore journal reads it back — without
+the decoder change the field would have been written and silently dropped on
+every read — and the Console shows it beside the status badge. The audit stays
+the fuller record.
+
+### F-028 — BUILT, NOT APPLIED
+`templates/arm-data-plane`: brings Firebase into existence on the project a
+client already has, registers one web app, and emits the whole web SDK config
+as one object — the seven values the Console's target-Firebase step otherwise
+asks somebody to retype. `client-host` enables the two Firebase APIs and grants
+the provisioner `roles/firebase.managementServiceAgent` (the narrow role, not
+`firebase.admin` — this builds the data plane, it does not read the client's
+records). Registered in the provisioning service; the Dockerfile already copies
+the whole templates directory.
+
+`terraform validate` clean, service tests cover the registration and the closed
+variable set.
+
+**Deliberately not applied.** `google_firebase_project` is a one-way door: a
+GCP project given Firebase cannot cleanly be un-given it. The first apply
+against a real client project is an operator's decision, not a deploy step.
+Two things to know before making it:
+1. `client-host` must be re-applied against `learning-gcp-404803` first, to
+   enable the APIs and grant the role.
+2. Then `POST /provisioning/jobs {template: "arm-data-plane"}` for
+   `test-sandbox`, review the plan (it should read "2 to add"), approve.
+   After that ARM's 412 should become a 200.
+
+### Gates
+`dart analyze` clean · `flutter analyze` clean · `tsc --noEmit` clean.
+Platform server **462** · Console **431** · exigence **801** · ARM 34 ·
+runtime module tftest 1 · every other suite unchanged.
