@@ -1231,3 +1231,69 @@ which is the split the fix is about: the service that holds nothing can be
 removed, the one that carries a client's runs cannot. Manifold can now be
 turned off for this client. Both services Ready, and the runtime kept its
 F-027 settings through the apply (`minScale 1`, `cpu-throttling false`).
+
+---
+
+## TEARDOWN AND REBUILD — 02/09/26
+
+### `test-sandbox` torn down
+44 Terraform resources destroyed. `learning-gcp-404803` verified empty: no
+Cloud Run services, no Firestore databases, no buckets, no service accounts.
+State cleared; the registry record reset to a claimed client with an empty
+`offeringScope` and no recorded runtime.
+
+Two things the teardown itself taught:
+- **Run it as the provisioner, not as the operator.** `obsidian.infinitum` has
+  no `storage.buckets.getIamPolicy` on the client's buckets, so the plan failed
+  on two IAM reads. `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT=citadel-provisioner@…`
+  is the way, and it needs `roles/iam.serviceAccountTokenCreator`, which the
+  operator already holds.
+- **Deletion protection has to be flipped by an apply first**, and a plain
+  `apply` migrates rather than unprotects once the template has moved on. A
+  `-target`ed apply on the protected resource is what works, then destroy.
+  The database's `ABANDON` policy means it survives the destroy and has to be
+  deleted separately.
+
+### Rebuild via the Console — in flight
+ARM toggled on; the build step planned `prov-1788330708446-3aq7p7be`:
+**5 to add, 0 change, 0 destroy** — Firebase, the web app, `(default)`,
+`citadel-arm`, `citadel-palisade`. Exactly the designed topology, and only the
+databases the enabled services need. **Planned, not approved** — approving
+creates a Firebase project, which cannot be undone.
+
+### F-032 · P2 · A template default reaches a template that cannot declare it
+**Did:** Ran `client-data-plane` for the first time, in production.
+**Saw:** `planFailed` — *"a variable named `container_image` was assigned on the
+command line, but the root module does not declare a variable of that name."*
+`CITADEL_TEMPLATE_DEFAULTS` is one map for every template; every Exigence
+template needs `container_image` and this one deploys no container.
+**Fixed:** the runner reads what a template declares out of its own `.tf` files
+and passes only that. Parsed rather than configured, because a second list is a
+second thing to keep in step — which is how this happened.
+
+### F-033 · P2 · Selectable text is invisible to a screen reader
+**Did:** Read the deployed Console through its own accessibility tree.
+**Saw:** the setup wizard's numbered instructions came back as "1." "2." "3."
+with nothing between them. Flutter's `SelectableText` does not enter the
+accessibility tree the way `Text` does — **26 places**: every setup plan's
+instructions, and every copyable id, bucket name, commit sha and storage path.
+**Fixed:** `CitadelSelectableText` keeps the selection and restores the label,
+with a test, because this regresses invisibly.
+
+### F-034 · P3 · ARM's setup contradicted its own build step
+**Did:** Walked ARM's setup in the Console.
+**Saw:** step one told the operator the client's Firebase "has to be connected
+to Citadel first, which is done in project settings" — the manual work step two
+now does for them. And `_armConnectionCheck` ran on step one, reporting the
+Firebase config incomplete, which step two completes. It was *optional* so it
+did not block, which is worse than blocking: red text that means nothing
+teaches an operator to ignore red text.
+**Fixed:** copy rewritten; the check moved to the last step, where the thing it
+checks exists.
+
+### NOTE · The signed-in Console is scriptable after all
+`document.querySelector('flt-semantics-placeholder').click()` builds Flutter's
+accessibility tree — 150+ nodes with labels and real rects. Screenshots and
+`get_page_text` still time out because Flutter paints to canvas; read with
+`javascript_tool` and click by coordinate. This supersedes the earlier note
+that the deployed Console could not be driven.
