@@ -122,16 +122,12 @@ material.
   stops being a platform constant, `run_host_suffix` stops being derivable
   once, and the `client-host` root's `projectIamAdmin` containment note stops
   applying.
-- **0.3.6.g** — **NOT BUILT.** Migration for `test-sandbox` and
-  `axis-education`, which hold data under the old topology.
-
-  Not needed yet, and deliberately not pre-emptive: every database name is now
-  a per-client setting that defaults to the new value, so both clients keep
-  reading the databases their records are actually in. Nothing is broken and
-  nothing has moved. Migrating means copying documents between databases and
-  repointing the record, which is a data move that wants its own plan and its
-  own verification rather than being folded into the change that made it
-  possible.
+- **0.3.6.g** — **NOT NEEDED.** Existing clients are being cleared and
+  re-onboarded from scratch before Citadel goes live, so there is no data to
+  migrate. The compatibility hedges written for them have been removed: every
+  database name is now fixed, `host_project_id` and `run_host_suffix` have no
+  defaults, and ARM's per-project database override is gone. A setting whose
+  only correct value is the constant is a way to be wrong.
 
 ### Open question
 Whether `citadel-palisade` holds evidence only. Palisade's authority records
@@ -158,3 +154,21 @@ the worst way for a migration to go wrong.
 The receiver grant check answers correctly for a pre-split client and would look
 in the wrong project for a post-split one. Threading the client's project
 through the verifier, the secret watchdog and two proxy routes is the piece left.
+
+### Debt removed, 02/09/26
+
+The compatibility layer written for existing clients came out once they were
+confirmed to be disposable:
+
+| Was | Is |
+|---|---|
+| `host_project_id` defaulted to the shared project | Required; the API resolves it from the record |
+| `run_host_suffix` defaulted to Citadel's own | Required; the runner reads it off the first address it deploys |
+| `exigence_database_id` a variable | Gone — `citadel-exigence` |
+| ARM's `firestoreDatabaseId` override | Gone — `citadel-arm` |
+| Manifold fell back to the runs database | Required; a deployment that does not say has not been configured |
+| `manifoldSecretProjectId` a constant | `ManifoldSecretProjectLookup`, reading the client's project from the record |
+
+`manifold_receiver_grant_test` used to pin the constant to the template's
+default. There is no default now, so it pins the *absence* of one — a default
+is exactly how the two would drift apart again without anything saying so.
