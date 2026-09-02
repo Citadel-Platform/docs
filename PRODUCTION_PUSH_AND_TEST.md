@@ -1144,3 +1144,46 @@ Two things to know before making it:
 `dart analyze` clean · `flutter analyze` clean · `tsc --noEmit` clean.
 Platform server **462** · Console **431** · exigence **801** · ARM 34 ·
 runtime module tftest 1 · every other suite unchanged.
+
+### Second pass — deployed and verified, 02/09/26
+
+API **`00037-qf6`**, provisioner Job on the new image. Roots applied:
+provisioner `0/1/0`, runtime `0/1/0` then `3/0/0` (the observer's read roles).
+
+| Check | Result |
+|---|---|
+| F-017 retire, no acknowledgement | **409**, naming the runtime URL, the Manifold receiver and bucket, and the client's Firestore and payload bucket |
+| F-031 refusal | still **invalidArgument** with the register-it message |
+| F-016/F-022 | **409** |
+| F-024 | **412** |
+| workspace, alerts, anomalies, drift, automations, runs, grants, inventory | **200** |
+
+**F-001 / F-002 verified**, and fixing them found one more thing. Pointing the
+observer at the host project turned five "Absent" rows into five
+`permissionDenied` ones: the Platform API had no read access to its own
+project and had never needed any, because it had always been looking at the
+client's. `permissionDenied` was already the better of the two answers — "could
+not look" is a fact where "absent" was an assertion about a project the
+resources have never been in — and three narrow read roles
+(`run.viewer`, `iam.serviceAccountViewer`, `serviceusage.serviceUsageConsumer`,
+not `roles/viewer`) make it useful. The panel now reads:
+
+```
+gcp-project          healthy    gcp-platform-api   healthy
+gcp-enabled-apis     healthy    gcp-arm-evidence   healthy
+gcp-client-runtime   healthy    gcp-platform-sa    healthy
+gcp-provisioner-job  healthy    gcp-arm-sa         healthy
+gcp-firestore        absent     <- true: learning-gcp-404803 has no default
+                                   database. F-028's gap, reporting itself.
+```
+
+### What is still open
+- **F-028 apply** — built and committed, not applied. `client-host` first
+  (Firebase APIs + the provisioner role), then `arm-data-plane` for
+  `test-sandbox`. `google_firebase_project` is a one-way door, so the first
+  apply is an operator's decision.
+- **F-017 has no Console flow.** The route exists and is tested; there is no
+  button. Hard rule #12 is not satisfied for retiring until there is one.
+- **F-023 needs a re-provision to reach `test-sandbox`.** Its receiver is still
+  deletion-protected from the earlier apply; the template change only lands on
+  the next `exigence-runtime` build.
