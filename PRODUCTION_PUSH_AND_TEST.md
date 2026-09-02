@@ -1029,3 +1029,38 @@ So the following are now proven on real infrastructure, not inferred: run
 creation, multi-step self-delivery over Cloud Tasks, the tool permission gate
 (allow, approval-required and deny all three observed), the approval hold and
 resolution, the audit trail, and F-027's warm instance underneath all of it.
+
+### F-031 — FIXED, 02/09/26
+
+`artifactAuthorityResolver` now reads the artifact's principal alongside the
+boundaries it pins, and refuses the plan when that principal could not act.
+Three distinct refusals, because they are fixed three different ways:
+
+| State | Refusal |
+|---|---|
+| identity not registered in Palisade | *"No Palisade identity … exists … Register it and grant it the capabilities its tools declare"* |
+| identity registered but disabled | *"… is disabled, so every run … would be refused"* |
+| registered, holds nothing on this project | *"… holds no capability on … Grant it the capabilities its tools declare — a reading artifact needs at least exigence.tools.read"* |
+
+At **plan** time, so the operator learns before spending anything on a build
+that cannot work — the same principle as the 409s this session put on the
+proxy paths.
+
+**It refuses rather than granting**, and that is deliberate. The capabilities
+an artifact needs include `exigence.communications.send` and
+`exigence.financial.execute` — messaging a client's customers and moving their
+money. A platform that conferred those as a side effect of an apply would be
+granting an agent authority no person had approved. Whoever builds the artifact
+decides what it may do; this only declines to build one that can do nothing.
+
+**Known limit, stated rather than hidden:** it cannot check that the
+capabilities *match the tools the artifact declares*, because those
+declarations live in the runtime image and not the control plane. It checks
+that the principal can act at all, and the message names the minimum. Closing
+that gap needs the artifact's tool manifest in the control plane, which is a
+larger change.
+
+Both provisioning templates resolve `artifact_authority`, so `exigence-agent`
+gets the same check as `exigence-runtime`.
+
+Server 452 tests (+3).
