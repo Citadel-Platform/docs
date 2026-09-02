@@ -929,3 +929,57 @@ deployed rather than trailing it.
   on this build. F-027's fix has been deployed to the provisioner but
   `test-sandbox`'s runtime has **not been re-provisioned onto it**, so an
   Exigence run there is still expected to fail until it is.
+
+### F-027 — VERIFIED FIXED in production, 02/09/26
+
+`test-sandbox`'s runtime re-provisioned through the Console's own
+plan → approve → apply path on the new provisioner image. The plan was
+`1 to update, 0 to create, 0 to destroy` — the runtime Cloud Run service and
+nothing else — and applied clean.
+
+The service now reports `minScale 1`, `cpu-throttling false`, revision
+`cit-test-sandbox-b82c-runtime-00003-8zf`, and its log carries
+`Starting new instance. Reason: MANUAL_OR_CUSTOMER_MIN_INSTANCE`.
+
+Evidence the fix does what it was for, from the runtime's own request log:
+
+| Before (01/09) | After (02/09) |
+|---|---|
+| `POST /runs` needed **9 retries** | **201 first attempt** |
+| step delivery aborted: "no available instance" | `POST /v1/tasks` from `Google-Cloud-Tasks` → **204 in 2.5s** |
+| `GET /automations` intermittent 500 | 200 first attempt |
+
+**F-026 also verified** — the runner left `offeringScope.exigence.enabled`
+true after the apply, so no separate enable step was needed.
+
+### The run still fails — but on something else
+
+The reference automation now **fails inside step 1's own work** (`fetch`,
+987 ms, delivered and executed) rather than never being delivered. That is a
+different problem from F-027 and does not undo it.
+
+Likely `test-sandbox` configuration rather than platform code: the runtime's
+`CITADEL_REFERENCE_SOURCE_URL` is `https://citadel.obsivision.com/` (reachable,
+200) and the Access boundary published by hand last session allows
+`https://citadel.obsivision.com/**` — a pattern that may not match the bare
+root. That is the boundary-pattern trap F-018 is about. **Not confirmed**, for
+the reason below.
+
+### F-030 · P1 · A failed step says nothing about why it failed
+
+**Did:** Triggered `exigence.reference.summary` on `test-sandbox`. Step 1
+failed.
+**Saw:** The run record carries `status: failed`, `durationMillis: 987`,
+`retryCount: 0`, **`attempts: []`** and **`failure: null`**. `activities` is
+empty. No route answers for the step's detail —
+`/exigence/runs/{id}/steps/{stepId}`, `/exigence/audit`,
+`/exigence/watchdog` are all 404, and `/exigence/data-flows` is a 400. The
+client runtime's Cloud Run log holds only `httpRequest` entries: it emits no
+application log for a step failure at all.
+**Expected:** a failed step names what it tried and what refused it. This is
+the one thing an operator needs and there is nowhere to get it — not the
+Console, not the API, not the logs. It is also what stopped this session
+confirming the boundary diagnosis above, so it costs debugging time
+immediately, not hypothetically.
+**Needs:** populate `attempts` with the error on a failed step, set the run's
+`failure`, and emit a structured log line from the runtime when a step fails.
