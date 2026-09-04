@@ -2756,3 +2756,43 @@ setting did not render in the console because the artifact listing is served by
 the *client's* runtime, and only the agent's had the new image. Obvious in
 hindsight and invisible from the console: the page simply omitted the control.
 Anything added to the listing needs both templates applied.
+
+### F-082 · P2 · A re-applied client runtime fails on a database it already has
+**Did:** Re-applied `exigence-runtime` on `user-test-1`, a client who already
+had Manifold, to roll a new runtime image.
+**Saw:** `Error creating Database: googleapi: Error 409: Database already
+exists` — after the apply had already updated both Cloud Run services. The
+build reports failure while having done most of its work, which is the worst
+shape a provisioning run can take.
+
+The cause is a consequence of a deliberate choice. `citadel-manifold` holds a
+client's customers' messages, so it is created with
+`deletion_policy = "ABANDON"`: a plan that would destroy it leaves it in place
+and drops it from state. State and reality then disagree permanently, and every
+later plan proposes creating a database that is already there.
+
+**Attempted and did not work:** adopting it back with `terraform import` before
+planning. The import is the right idea and fails for an unrelated reason —
+`terraform import` evaluates the whole configuration, and this template has a
+`for_each` that cannot be resolved without a plan, so the import dies on
+`Invalid for_each argument`. On a client who genuinely has no database that
+same failure is indistinguishable from "nothing to adopt", which is how the
+first attempt reported success at doing nothing.
+
+The runner now prints Terraform's own words when the adopt fails, so the next
+person sees `Invalid for_each argument` rather than a reassuring sentence.
+
+**Still open, and it needs one of:**
+* making the offending `for_each` resolvable without a plan, which would let the
+  import work as intended and is the smallest real fix;
+* `lifecycle { prevent_destroy = true }` on the database so it is never
+  abandoned in the first place — state and reality cannot drift if the destroy
+  is refused, though it turns a teardown into a manual step;
+* an `import` block in the template guarded by a variable the API sets when it
+  knows the client already has Manifold.
+
+The first is the one to try. Recorded rather than chosen, because all three
+change what a teardown does and that is not a decision to make at 2am.
+
+**Not blocking:** every service is deployed and healthy on the intended images.
+This costs a red provisioning job on re-apply, not an outage.
