@@ -2717,3 +2717,42 @@ The compiler cannot catch an absence and a reviewer has to notice one.
 offering fails a test rather than a customer's project. Confirmed to fail with
 `manifold` removed. The three other constructions that omit offerings are seed
 data, where showing an offering as off is honest — checked, left alone.
+
+## Overnight, 04–05/09/26 — deploying what was written, and what that exposed
+
+### F-080 · P1 · A run stranded mid-step can never be cancelled, and said so as a 502
+**Did:** Redeployed the agent's runtime while two channel runs were held at
+`awaiting_approval`.
+**Saw:** both runs moved to `running` with `step-1.act` in flight and stayed
+there. Cancelling them answered **502**.
+
+The refusal underneath is right: `CancellationPendingInFlightError` — a run
+cannot be compensated while a step is in flight, because the tool may already
+have put a message on somebody's phone and undoing the run without knowing that
+would be worse than leaving it. What was wrong is that it reached the console as
+a gateway error, which reads as "the platform is broken" rather than "this run
+is waiting on evidence".
+
+**Fixed:** a 409 carrying that sentence.
+
+**Not fixed, and it needs a decision.** A step that was in flight when its
+instance was recycled waits for evidence that can never arrive. The run cannot
+proceed and cannot be cancelled. There is no operator path out of it today, and
+the honest options are a supervisor that ages out in-flight activities after a
+bounded wait, or an explicit operator override that records that the evidence
+was never going to come. The second is safer and duller; the first is what
+stops a person having to notice. Recorded rather than chosen.
+
+### Two smaller things the same session found
+
+**Cancelling a run does not purge its queued deliveries.** Sixteen compensated
+runs left Cloud Tasks entries retrying against a runtime that refuses them —
+twelve dispatches, zero responses, backing off toward an hour. Harmless, but it
+is work the platform keeps doing on behalf of runs it has already given up on.
+Two were deleted by hand. Worth a purge on compensation.
+
+**A client's own runtime is not redeployed by an agent's apply.** The reply
+setting did not render in the console because the artifact listing is served by
+the *client's* runtime, and only the agent's had the new image. Obvious in
+hindsight and invisible from the console: the page simply omitted the control.
+Anything added to the listing needs both templates applied.
