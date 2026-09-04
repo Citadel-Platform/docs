@@ -12,8 +12,9 @@ verified live; those two are the only things waiting on a person.
 ## What works now, proven on `user-test-1` rather than in a test
 
 A customer's WhatsApp message reaches the agent, runs it, and the agent replies
-without anybody in the console. The last verification run shows six
-`execute_tool channel.send` spans, unattended, on revision 2.
+without anybody in the console. Verified at 19:01 on 04/09: `channel.send`
+status **ok**, the run **succeeded** at sequence 28 on revision 2, and a
+`manifold_conversations` record carries the exchange.
 
 The path, and the thing that was broken at each step:
 
@@ -98,9 +99,37 @@ fact they carried.
 * **`test-sandbox`** stays Exigence-blocked until ~09/09/26 on the queue-name
   reservation. `user-test-1` supersedes it.
 
-## One thing to watch
+## Two more found after the first pass, both fixed
 
-The verification run made **six** `channel.send` calls in one run — one per
-step of its six-step budget. That is within what it was published with, but an
-agent that answers a customer six times is not what anybody wants. Worth
-deciding whether the superharness should stop after its first reply.
+* **F-084 — an agent could decide to reply and not be allowed to.**
+  `exigence-agent` passes `manifold = null` to the runtime module, correctly
+  reasoning that an agent has no line of its own to *receive* on. That also
+  removed the channel secret grants it needs to **send**. So the approval gate
+  said yes, the policy said yes, `channel.send` was called — and Secret Manager
+  refused, after everything that reports on authority had already reported
+  success. Now one grant per published secret, resolved server-side.
+
+* **F-085 — an agent that reaches its ceiling strands its run.** Smaller than
+  it first looked: the looping was a symptom of the send failing and being
+  retried. With sends working the agent answers once and the run succeeds. What
+  remains is that reaching the ceiling throws rather than closing the run, which
+  is worth fixing with F-080's other half.
+
+## An hour spent on something that was not a bug
+
+Twelve `channel.send` calls failed and the cause was the platform being right:
+the test number was recorded `opted_out` from a "STOP" sent during earlier
+testing. Every reply was refused because the person had asked not to be
+messaged. Sending "start" opted back in and the next question was answered.
+
+Worth knowing because a correct refusal and a real failure look identical from
+a trace span carrying `status: error` and nothing else. The consent refusal
+knows exactly why it refused; the span does not keep it. **If you want one
+small thing to improve, that is a good one.**
+
+## State of the test client
+
+`user-test-1`'s agent is currently set to **Send automatically** — that is how
+it was verified. Switch it back to Hold for approval in the Console (Exigence →
+Automations → Superharness → Replies) if you would rather it not answer while
+you are not watching. The test number `+6597895638` is currently opted **in**.
