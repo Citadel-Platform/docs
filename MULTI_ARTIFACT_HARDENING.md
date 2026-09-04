@@ -82,3 +82,88 @@ is on the hot path of every run and unbounded in the number of agents.
    first, and a cache on an authorisation decision needs an argument.
 5. **`minScale` as a deliberate choice** (1). Needs a product decision, so it is
    surfaced rather than silently changed.
+
+---
+
+# What was actually done — 04/09/26
+
+## 1. Cost — assessed, nothing changed, and the assessment was wrong
+
+This was written up as an unconsidered default inherited from the
+single-runtime era. It is not. `min_instances = 1` carries a comment and a
+finding: a run's kickoff returns long before the run is over and the next step
+arrives as a Cloud Tasks callback minutes later, so scale-to-zero plus
+throttled idle CPU recycles the instance between the two and the callback
+cold-starts without the graph state. The symptom is "no available instance" and
+a run that fails at step 1. **One warm instance is a correctness requirement,
+not a latency preference. See F-027.**
+
+So `min=0` is not available, and the cost is real: one warm instance per
+artifact per client. The only lever that would change it is a runtime serving
+several artifacts, which trades away the "serves one, refuses the rest"
+isolation the authority model leans on. Left alone deliberately; recorded here
+so the next person does not re-derive it, and so the earlier claim in this file
+is not left standing uncorrected.
+
+## 2. Per-project assumptions — fixed (F-078)
+
+The provisioning runner records each agent's address beside its identity. The
+inventory emits a node per agent, sorted so it does not reorder between reads.
+The live observer matches each agent's service the same way it matches the
+project's own.
+
+One thing worth recording, because it happened while fixing it: the first
+version of the drift check was nested inside `if (recordedRuntimeUrl != null)`,
+so an agent would not have been observed unless the *client* had a runtime of
+its own — the same "per project" assumption, one level down, written by the
+change meant to remove it. The Cloud Run listing is now gated on the project's
+own address **or** any agent's, and a test covers exactly that case. It was
+confirmed to fail against the nested version.
+
+## 3. Untested templates — fixed
+
+`template_validity_test` stages every template the way the image stages it,
+reading the stagings out of the Dockerfile so the two cannot drift, and runs
+`terraform init -backend=false` and `terraform validate`. Every template
+directory is discovered rather than listed. Confirmed to fail against the
+duplicate `output` block that cost a full build/deploy/plan cycle to find.
+
+Three templates validate in about eleven seconds.
+
+## 4. Provisioning round trips — improved by (3), not otherwise changed
+
+The class of error that cost the most time is now caught locally in seconds.
+The remaining slowness is plan and apply being two separate job executions,
+which is the approval gate working as designed: an operator approves a plan and
+the apply runs that plan. Not changed.
+
+## 5. The authority lookup — evaluated, cache refused, real bug found
+
+A cache was considered and rejected. The existing comment is right that a stale
+"yes" on "who may ask what an artifact may do" is worse than a slow "no", and
+there is no evidence the read hurts.
+
+Evaluating it did surface a defect introduced with F-076: both new readers used
+a single `list` with `pageSize: 100` and no page token. A project's hundred and
+first agent would have been absent from the inventory and — far worse — refused
+when it asked what its artifact may do, which is F-076 again with a page
+boundary for a cause. Both readers now share one helper that follows the pages.
+
+## 6. Derive, do not copy — one more guard (F-079)
+
+`ProjectOfferingScope` is freezed with a default on every field, so a
+construction that omits an offering compiles and silently resets it, and the
+settings screen rewrites `offeringScope` wholesale — an omission deletes what
+the operator had. That is exactly how Manifold was dropped. The settings
+encoder is now checked against `Offering.values`, so a sixth offering fails a
+test instead of a customer's project. Confirmed to fail with `manifold` removed.
+
+The three other `ProjectOfferingScope` constructions that omit offerings are
+seed data, where showing an offering as off is honest. Checked, left alone.
+
+## Findings this file adds
+
+* **F-078** — an agent's runtime was invisible to the inventory and unobserved
+  by the drift check.
+* **F-079** — the Console's settings save could silently drop an offering, and
+  nothing but a reviewer's attention stopped it.
