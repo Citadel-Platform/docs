@@ -1297,3 +1297,1227 @@ accessibility tree — 150+ nodes with labels and real rects. Screenshots and
 `get_page_text` still time out because Flutter paints to canvas; read with
 `javascript_tool` and click by coordinate. This supersedes the earlier note
 that the deployed Console could not be driven.
+
+---
+
+## REBUILD COMPLETED — 02/09/26
+
+### `test-sandbox` is back, on the designed topology
+`prov-1788330708446-3aq7p7be` approved and applied — the Firebase project, the
+web app, `(default)`, `citadel-arm` and `citadel-palisade`. Then all four
+offerings enabled and `prov-1788333236016-1aotiaky` planned **3 to add, 0
+change, 0 destroy** — `citadel-conduit`, `citadel-exigence`, `citadel-baker`
+and nothing else — and applied. `learning-gcp-404803` now holds:
+
+```
+(default)  citadel-arm  citadel-baker  citadel-conduit  citadel-exigence  citadel-palisade
+```
+
+The incremental property the template claims is now demonstrated rather than
+asserted: a second run against a live data plane created what was missing and
+touched nothing that existed.
+
+**Driven through the Platform API, not the Console.** The Chrome extension
+connected and dropped four times across the session — `list_connected_browsers`
+alternating between one browser and none, and the tab group being destroyed
+between calls — so the Console's own routes were called directly. The two
+defects below were found by reading the Console's source against what the
+rebuild actually required, not by driving it.
+
+### F-035 · P1 · ARM's identity reached every database in the client's project
+**Did:** Re-checked `customers/test-sandbox/iam` after the data plane applied,
+which the previous handoff flagged as "still grants against the old
+arrangement".
+**Saw:** `roles/datastore.user` granted **project-wide and unconditioned** to
+`citadel-arm-evidence@citadel-platform`, confirmed live in the policy. Under the
+02/09/26 topology that project no longer holds one database — it holds six. So
+ARM's runtime could read and write `(default)`, the client's own business data,
+and `citadel-conduit`, which holds session replays: personal data about people
+who never dealt with Citadel, and which the permission catalogue already treats
+as categorically different from the client's own material.
+**Why it matters more than a stale root:** the load-bearing reason for the whole
+topology decision is that Firestore IAM can name a database and cannot name a
+collection. A database each only enforces anything where the bindings carry the
+condition. This one did not — and no conditioned binding existed anywhere in
+`platform/infra`, so the property the decision rests on was, in the control
+plane, a comment.
+**Fixed:** both customer roots now carry the same condition form the Exigence
+runtime module has used since it was written and that Firestore documents for
+per-database access — `resource.name == "projects/<project>/databases/citadel-arm"`.
+Applied to `test-sandbox` and verified in the live policy: the binding is
+replaced, conditioned, and names one database.
+**Not applied to `axis-education`, deliberately.** It is an active client on
+`luminary-axis-dashboard` with **no provisioning jobs at all** — it has never
+been built under the new topology, so `citadel-arm` does not exist there and
+applying this would cut ARM off rather than narrow it. The source is correct for
+where that client is going; the apply waits on its `client-data-plane` run.
+
+### F-036 · P1 · Only ARM's setup could ever create a client's databases
+**Did:** Went to enable Conduit, Exigence and Baker the way the handoff
+describes — "re-running the build step for each".
+**Saw:** there is no build step for each. `client-data-plane` appeared in
+exactly one place in the Console: `arm-build`, inside ARM's setup plan. Conduit
+and Baker have no build step at all, and Exigence's builds a runtime, not a data
+plane. So a client who enabled Conduit after ARM got no `citadel-conduit`; a
+client who never bought ARM got no database at all. Conduit's pages would have
+been correct and empty, and Exigence's runtime would have deployed pointed at a
+database that did not exist — failing on its first run rather than at deploy.
+The only recovery was to reopen *ARM's* setup and re-run its build, which is
+discoverable by nobody and impossible without ARM.
+**Second defect inside the first:** `_citadelDatabasesFor` read
+`project.offeringScope` — the scope **as saved**, which during setup is the
+scope without the service being set up. A build sized off it provisions for
+every service except the one the operator came here to turn on.
+**Fixed:** the step is extracted as `_dataPlaneStep` and given to all four
+plans, and `ServiceSetupStep.body` is handed the *prospective* scope alongside
+the project. That makes the sizing right whether the build runs before the
+enable step (ARM) or after it (the other three), which is why it is the scope
+rather than the step order that was changed. `armDataPlaneEstimate` is renamed
+`clientDataPlaneEstimate`: it was never ARM's, and now four plans show it.
+A test asserts the prospective scope reaches the body, because the failure is
+silent — a build that succeeds and creates one database too few.
+
+### NOTE · `updateProjectOfferingScope` is dead code in the Console
+`PlatformRegistryRepository.updateProjectOfferingScope` writes
+`offeringScope` straight to Firestore. Nothing in production calls it — the
+write goes through `PUT /v1/projects/{id}/offering-scope/{offering}`, because
+the registry rules refuse every browser writer of that field. Only a test double
+overrides it. It is a method that cannot succeed if called, left where someone
+could call it. Worth removing with the two `scopeWrites == 0` assertions
+repointed at the API client.
+
+### NOTE · The offering-scope route takes a `fields` wrapper
+`PUT …/offering-scope/{offering}` with `{"enabled": true}` answers
+`invalidArgument: No settable fields were supplied.` — the body must be
+`{"fields": {"enabled": true}}`. The message names the symptom and not the
+shape; `The body must be a JSON object with a \`fields\` map.` is already the
+text of the sibling parse failure and would have been the answer here.
+
+---
+
+## E2E SWEEP — 02/09/26
+
+Backend sweep: **31 assertions passed**, 3 initially failed. Two of those three
+were the test being wrong and the platform being right, which is worth recording
+because both are properties worth keeping:
+
+- `GET /v1/projects/{id}/principals/{p}/authority` refuses a browser token with
+  403. By design: only a service credential from a trusted caller, or the
+  runtime that serves that project, may resolve principal authority. A browser
+  token is refused even when its holder is on the list.
+- `data-flows` is `/v1/projects/{id}/exigence/data-flows`, not a project-level
+  route. It answers `failedPrecondition` for a client with no Exigence runtime,
+  like every other Exigence route, with a message naming the remedy.
+
+Also confirmed good: unauthenticated and garbage tokens are 401; an unknown
+route is 404 rather than 500; an unknown project's jobs are 403; applying an
+applied job is 409; an undeclared variable and an unknown template are both 400;
+a job id from one client is not readable under another; Conduit's public edge
+refuses an absent and an unknown key with a message that names which; and every
+Exigence route on a client with no runtime answers
+*"No Exigence service is deployed for this project. Set it up from the
+project's Services settings."* — cause and remedy in one line.
+
+### F-037 · P1 · The Console reads Conduit's registry from the browser, and the rules deny it
+**Did:** Walked Conduit's setup on `test-sandbox` after enabling it, then opened
+the Conduit pages.
+**Saw:** the setup's own check fails — *"Your account cannot read or write
+Conduit"* — and Voice of Customer resolves, after a long blank spinner, to
+*"Not permitted. 1. Confirm you are signed in as the right account. 2. Check
+your roles under Palisade → Your authority."*
+
+Both diagnoses are wrong. The operator holds every Conduit permission Palisade
+can grant (`conduit.sessions.search`, `.replay`, `.update`,
+`conduit.heatmaps.query`), and checking their roles will show exactly that,
+leaving them stuck. The Platform API answers these correctly. The failure is
+that `PlatformConduitRepository.getProjectContext` reads
+`conduit_projects/{projectId}` **straight from Firestore in the browser**, and
+`firestore.rules` has no match for it, so it falls to the catch-all
+`allow read, write: if false`.
+
+Confirmed empirically with the operator's own Firebase ID token against the
+Firestore REST API — the same credential and the same rules the browser gets:
+
+```
+conduit_projects                    403
+conduit_hosted_survey_deployments   403
+conduit_source_maps                 403
+conduit_alerts                      403
+conduit_sessions                    403
+conduit_funnels                     403
+platform_projects                   200   ← the collection that has a rule
+```
+
+So this is not one page. Every Conduit surface that reads its configuration
+from Firestore is structurally unreachable, for every operator, on every
+project, and always has been. What still works is exactly what goes through the
+Platform API: session search, replay and heatmaps.
+
+**Why the rules are right and the Console is wrong.** `conduit_projects` holds
+`projectKey` — the ingest credential the public edge authenticates with. A
+browser that could read it would learn the key that lets anyone post events as
+that client; one that could write it could repoint the client's ingest. So the
+fix is not a rule that opens the collection. It is a Platform API route serving
+this context under the API's own service account, the way
+`PUT /v1/projects/{id}/offering-scope/{offering}` already does for the field
+whose rules refuse every browser writer — and that route has to decide, as a
+product question, whether the ingest key is ever handed to a browser at all.
+
+**Not fixed.** The shape of the fix turns on that key question, and guessing it
+would be the wrong kind of speed.
+
+### NOTE · An invalid database name is refused late, not early
+`POST …/provisioning/jobs` with `citadel_databases: ["citadel-evil"]` is
+accepted, queued, and run, and refused ~45 seconds later at plan time:
+*"citadel_databases may only name Citadel product databases … checked by the
+validation rule at variables.tf:87."*
+
+The refusal is authoritative and the message is good. Recorded rather than
+fixed, deliberately: the closed set lives in the template that creates the
+databases, and teaching the API a second copy of it is precisely the second
+list F-032 was about. Only a hand-written API call can reach this; the Console
+never sends a value that is not in the set.
+
+### NOTE · "Apply 0 changes" is offered as an action
+A data-plane step with nothing to do says *"Nothing to do"* and then presents an
+enabled **Apply 0 changes** button. The honesty is right; offering a no-op as an
+action is not.
+
+### F-038 · P1 · Two roots both create `citadel-exigence`, so the runtime build always fails
+**Did:** Ran Exigence's setup end to end on `test-sandbox` — the first real
+`exigence-runtime` build since the topology decision.
+**Saw:** `applyFailed` after nine minutes and thirty-odd resources:
+
+```
+Error creating Database: googleapi: Error 409: Database already exists.
+Please use another database_id
+```
+
+`client-data-plane` creates every `citadel-*` database, `citadel-exigence`
+included, whenever Exigence is enabled. `exigence-runtime` *also* declared
+`google_firestore_database.client` with the same name in the same project. Two
+roots cannot own one resource, and the second one to run loses.
+
+**Why it had not bitten before:** while Exigence's plan had no data-plane step,
+a client could reach the runtime build with no `citadel-exigence` yet and the
+runtime would create it. F-036's fix put a data-plane step in Exigence's own
+plan, which makes the data plane always run first — so the collision went from
+latent to certain. It would also have fired for any client whose ARM setup ran
+first with Exigence enabled, which is the ordinary case.
+
+**Fixed:** the resource is removed from `exigence-runtime`. The data plane owns
+the databases, because it is the root that knows which ones a client's enabled
+services need; the runtime consumes the name, exactly as `exigence-agent`
+already did. The name stays a constant for the same reason the rest of the
+topology is. Re-planned: **18 to add, 0 change, 0 destroy**, and applied.
+
+### F-039 · P1 · A client cannot be rebuilt within a week of teardown
+**Did:** Applied the corrected `exigence-runtime` for a client that had been
+torn down earlier the same day.
+**Saw:** `applyFailed`, again after most of the resources were created:
+
+```
+Error creating Queue: googleapi: Error 400: The queue cannot be created
+because a queue with this name existed too recently.
+```
+
+Cloud Tasks reserves a deleted queue's name for about seven days. The queue name
+is derived deterministically from the client id, so **tearing a client down and
+rebuilding them is blocked for a week** — and the operator learns this from a
+raw Google error after a nine-minute apply that has already created a Cloud Run
+service, two service accounts and ten IAM grants.
+
+Not fixed: the remedies are a design decision, not a bug fix. Either teardown
+stops deleting the queue (they cost nothing idle, and keeping it is what makes a
+rebuild possible), or the name carries something that changes per build, or the
+runner recognises this specific error and says *"this client was torn down in
+the last seven days; Cloud Tasks reserves the queue name for that long"* before
+spending nine minutes. The first is probably right and the third is owed
+regardless.
+
+**Consequence for `test-sandbox`:** Exigence cannot be built on this client id
+until ~09/09/26. The half-built runtime was torn down rather than left running.
+
+### Teardown — verified
+`terraform destroy` of the Exigence runtime root: **32 destroyed**, and the
+result is exactly right:
+
+- no Cloud Run services and no runtime service accounts remain;
+- all six databases survive, on the `ABANDON` policy — a Citadel teardown does
+  not take the client's data with it;
+- the runtime's two conditioned `datastore.user` bindings are gone, and ARM's
+  remains, still conditioned.
+
+The deletion-protection lesson from the previous teardown held: a `-target`ed
+apply with `deletion_protection=false` first, then destroy.
+
+### Verified · The topology decision is now actually enforced
+Every `roles/datastore.user` binding in the client's project, read live during
+the build:
+
+```
+citadel-arm-evidence@citadel-platform        → databases/citadel-arm
+cit-test-sandbox-b82c-runtime@…404803        → databases/citadel-exigence
+cit-test-sandbox-b82c-runtime@…404803        → databases/citadel-manifold
+```
+
+Three services, three conditions, no unconditioned grant anywhere. That is the
+property the 02/09/26 decision rests on, holding across ARM, Exigence and
+Manifold at once, which had never been demonstrated before.
+
+### F-040 · P3 · A Terraform primitive is listed as a billable resource
+The plan panel headed *"This creates billable resources"* lists **"1 time
+sleep"** among the Cloud Run services and Firestore indexes. `time_sleep` is a
+Terraform wait, not something Google bills for. In the same list, "firestore
+field" is lowercase beside "Firestore index".
+
+---
+
+## F-037 AND F-039 CLOSED — 02/09/26, evening
+
+### F-037 — FIXED and verified in production
+`GET`/`PUT /v1/projects/{id}/conduit/context`, served under the API's own
+service account. The collection stays closed, because the reason it is closed
+is right: `conduit_projects` holds `projectKey`, the credential the public edge
+authenticates events with.
+
+Two new permissions, `conduit.context.read` and `conduit.context.update`, held
+apart from each other — someone who may look at the ingest key must not thereby
+be able to repoint where a client's events are attributed — and both placed in
+`superdevOnlyPermissions`, which is documented as covering things that "expose
+configuration a client does not see today". Reading this document is reading a
+secret. The key *is* still served to the operator, deliberately: it is the value
+they install in the client's site, and Touchpoints exists to show it. What
+changed is that serving it is now a permission rather than an accident.
+
+The whole document is carried rather than a field whitelist, unlike the offering
+scope. The difference is what the fields are: an offering scope decides whether
+permissions resolve, so each settable field is named; this is the operator's own
+configuration, and naming its fields here would be a second schema to keep in
+step with Conduit.
+
+The Console change is one method — `PlatformRegistryRepository
+.loadConduitProjectContext` — because all nine call sites went through it.
+
+**Verified end to end in production:**
+- Voice of Customer, which showed a long blank spinner and then *"Not permitted
+  — check your roles under Palisade"*, now reads **"No project configuration —
+  Test Sandbox has no Conduit project context yet."**
+- Touchpoints, which was unreachable, renders the project key and all five
+  capture settings.
+- A **toggle flipped in the Console persists**: `replayCapture.enabled` true,
+  read back through the route.
+- And the key written through the route **authenticates at the public ingest
+  edge**, while a wrong key is still refused — Console → API → Firestore →
+  ingest, proved across three services.
+
+**Not migrated, deliberately:** Voice of Customer's *save*. It batches the
+context together with `conduit_hosted_survey_deployments`, which is denied too,
+and sending half of that through the API would turn one atomic refusal into a
+write that half-succeeds. It needs a route that does both.
+`conduit_source_maps` and `conduit_alerts` are in the same position.
+
+### F-039 — proceeding with the delete, with the warnings that were owed
+Per the operator: teardown keeps deleting the queue. What was missing was
+anybody being told.
+
+- **The runner now translates the error.** `explainFailure` turns *"a queue with
+  this name existed too recently"* into what it means — this client was torn
+  down within the last seven days, Cloud Tasks reserves the name that long, the
+  queue is named after the project, wait and re-run, and everything else the
+  build made was applied and will be left alone. It keeps Google's own wording
+  after the explanation, so the raw error is still searchable. A second entry
+  covers the F-038 database collision. Anything not recognised is passed through
+  unchanged, because a wrong explanation is worse than a raw one.
+- **The Console warns where the decision is made.** The retire dialog now says
+  that a teardown afterwards blocks rebuilding under the same project id for
+  about seven days. Retiring destroys nothing, so this is not the moment it
+  bites — it is the moment somebody decides, and the wall is a week away.
+
+### F-041 · P1 · The public edge answered "try again" to a condition no retry can clear
+**Did:** Sent a real, fully-formed event through `POST /v1/events` with the key
+written through the new context route.
+**Saw:** `500 — "The Conduit ingest service failed unexpectedly"`, with
+`retryable: true`. The request id tied to a stderr line naming the cause, which
+is the one thing that worked: `FormatException: googleCloudProjectId must be a
+non-empty string`.
+
+The project's context has no `target` — the field naming which Google Cloud
+project its events are written to. Two paths reach it: no context document at
+all threw a `StateError`, and a document without a `target` threw a
+`FormatException` out of a decode that falls back to reading the whole document
+and then insists on `googleCloudProjectId`.
+
+Neither is a fault. The request was well formed, the key authenticated, nothing
+broke: the project is not finished being set up. Reporting it as an internal
+error was wrong twice — it told the caller nothing, and it told them to retry,
+so an instrumented site would keep sending into a project with nowhere to record
+the events, forever, against a condition only an operator can clear.
+
+**Fixed:** a `failedPrecondition` code, held apart from `invalidArgument` (which
+blames the caller) and `internal` (which says nothing), and a 409 that names the
+project, what is missing and who fixes it. Verified in production:
+
+```
+409 failedPrecondition · retryable false · details.projectId test-sandbox
+"This project has no Conduit ingest destination configured yet, so there is
+ nowhere to record these events. An operator finishes this in the Citadel
+ console under the project's Conduit setup."
+```
+
+### Live state after this work
+| | |
+|---|---|
+| `citadel-platform-api` | `00040-4cv` — the Conduit context route |
+| `citadel-conduit-ingest` | new digest — the ingest precondition |
+| `citadel-provisioner` (Job) | `16967053…` — `explainFailure` |
+| Console | `163e9ec8729ffa47`, verified against a freshly built bundle |
+
+Tests: Console 443 · server 479 · conduit ingest 134 · palisade authority 48 ·
+provisioner 16. Backend sweep unchanged at 31 pass.
+
+---
+
+## FINISHING UP — 02/09/26, late
+
+### Conduit is complete: no collection is read from the browser
+The last three — `conduit_source_maps`, `conduit_alerts` and
+`conduit_hosted_survey_deployments` — now go through
+`GET`/`PUT /v1/projects/{id}/conduit/entries/{kind}`, and Voice of Customer's
+save through `PUT .../conduit/voice-of-customer`, which commits the context and
+the deployments it implies in one write. `platform_firestore` reaches no
+`conduit_*` collection at all now.
+
+Two properties worth keeping, both verified in production:
+- **`kind` is a closed set, not a collection name.** This runs as the API's own
+  service account, so a kind taken from the caller would read any collection.
+  `entries/palisade_grants` answers `No `palisade_grants` here.`
+- **The flat collection's `projectId` is stamped by the server.** A deployment
+  written with `"projectId":"axis-education"` is stored as `test-sandbox`. It
+  is the only thing separating one client's surveys from another's.
+
+Walked in the Console: Alerts reads back a rule written through the route,
+Touchpoints renders the key and persists a toggle, Journeys loads, and Voice of
+Customer — a blank spinner then "Not permitted" this morning — renders its whole
+configuration surface and **saves**, `feedbackWidget.enabled` true through the
+atomic route.
+
+### F-043 · P1 · The Console showed the wrong reason for every 409
+**Did:** Opened Exigence for a client with no runtime.
+**Saw:** *"Changed elsewhere — the automations changed since this screen loaded.
+Reload, then apply the change again."* On a page that had loaded nothing and
+changed nothing.
+
+Every API client decoded the platform's error body and threw the status alone,
+so the sentence the server had written for this reader was discarded and
+replaced by a guess made from three digits. The platform answers 409 for two
+different things and the Console only knew one.
+
+**Fixed:** `apiFailureText` carries the platform's `code` and `message`, and a
+409 that is a `failedPrecondition` renders as "Not set up yet" with the server's
+own sentence. It carries those two fields and nothing else — session search
+asserts that private detail never reaches an exception message, and the existing
+test caught it when this first tried to pass the whole body through. Verified:
+the page now reads *"No Exigence service is deployed for this project. Set it up
+from the project's Services settings."*
+
+### F-042 · P1 · The client's Firebase config was computed and thrown away
+**Did:** Walked ARM's setup to its last step, which had never been done.
+**Saw:** the final check red, asking the operator to fill in the target Firebase
+project ID, API key, app ID and messaging sender ID by hand — the manual work
+`client-data-plane` exists to remove.
+
+`client-data-plane` registers the web app and emits `web_app_config`, described
+in the template as "what the Console needs to fill the target Firebase fields in
+without anybody retyping seven values off a screen". Nothing read it: the runner
+recorded `exigence-runtime`'s outputs and returned early for every other
+template. Every client ever built this way has an empty config.
+
+**Fixed:** the runner records it on the project. Verified on `test-sandbox`,
+which predates the fix — a data-plane run with **nothing to create** still
+re-reads its outputs, and six fields landed. `measurementId` is correctly absent
+because Analytics is off.
+
+That is also why the "Apply 0 changes" button came back, renamed. Removing it
+was wrong: a zero-change apply is exactly how a client built before an output
+was recorded gets it recorded. It now says **"Re-read this build's details"**,
+which is what pressing it does.
+
+### F-044 · P1 · The function that describes a Firestore failure was one
+**Did:** Read the Details under ARM's failing check.
+**Saw:** `int.fromEnvironment can only be used as a const constructor`.
+
+`PlatformFirebaseRuntime.firestoreEmulatorPort` omitted `const` where the two
+getters beside it have it, and dart2js throws on a non-const `fromEnvironment`
+in a release build. `describePlatformFirestoreFailure` reads it
+**unconditionally, before any branch** — so in production every attempt to turn
+a Firestore error into a sentence threw, and what reached the operator was that
+error instead of theirs.
+
+**Fixed**, and the truth underneath was an honest, actionable one: *"Target
+project auth needs attention — no Google session is active for the target
+Firebase project yet. Use Connect target auth, then rerun validation."* Amber,
+not red; an outstanding setup step rather than a fault, which is what it always
+was. A test reads the source, because on the VM a non-const `fromEnvironment`
+evaluates happily and no ordinary test could catch it.
+
+### The Console, swept
+Every product section walked on `test-sandbox`:
+
+| | |
+|---|---|
+| ARM | Console and Issue Fingerprints render, honest empty states |
+| Conduit | Overview, Touchpoints, Journeys, Alerts, Voice of Customer — all render, and both writes persist |
+| Exigence | reports the truth for a client with no runtime |
+| Baker | Modules lists six; its wizard completes, and its last check honestly reports an unknown rather than a false pass |
+| Manifold | Channels renders, verified sending domain, honest empty state |
+| Palisade | Access lists three grants; superdev now carries **75** permissions, the two new Conduit ones included |
+
+All four setup wizards walked end to end. Each now carries the shared data-plane
+step, and each planned **0 to add** against a client whose data plane is
+complete — idempotency demonstrated from four different plans.
+
+### Final state
+| | |
+|---|---|
+| `citadel-platform-api` | `00041-65z` |
+| `citadel-conduit-ingest` | redeployed |
+| `citadel-provisioner` (Job) | `188bdf7c…` |
+| Console | `8becab57…`-then-rebuilt, verified against a freshly built bundle each time |
+| `test-sandbox` | 6 databases, 4 offerings, Conduit configured, Firebase config recorded |
+
+Tests: Console 448 · server 485 · conduit ingest 134 · palisade authority 48 ·
+provisioner 16 · contracts 4 — **735 passing**. Backend sweep 31. Analyzers,
+`terraform fmt -recursive -check` and `validate` clean.
+
+---
+
+## CREATING A CLIENT — 02/09/26, night
+
+### F-045 · P1 · Project creation was impossible, and the reason was invisible
+**Did:** Created "User Test 1" through the Console, as the operator reported
+failing.
+**Saw:** at the last step, *"Not permitted — your account cannot read or write
+the project."* The account was never the problem: the operator holds
+`platform.projects.create`, the Palisade identity document carries it, and
+`canCreateProjects()` passes.
+
+Two faults, and the second is the one worth remembering.
+
+**One:** `isValidExigenceScope` accepted five keys and the Console writes eight.
+It gained `citadelMcpEnabled` and `runtimeBoilerplate` with the runtime
+boilerplate choice, and `manifoldReceiverServiceAccount` when the receiver got
+an identity. `keys().hasOnly([...])` is false for a key it has not been told
+about, and one false predicate refuses the document. Proved by writing the
+document as the operator's own browser token: five keys create it, adding
+`citadelMcpEnabled` alone answers 403.
+
+**Two, and fixing the first did not fix it.** The document still failed.
+Bisecting showed removing *any* one field made it pass, and shrinking either
+`targetFirebase` or the Exigence scope made it pass. Nothing was wrong with any
+field. **Firestore caps how much a rule may evaluate per request, and this
+ruleset had grown past it** — `isValidProject` checked the length of every
+optional string and `isValidArmFirebaseConfig` did the same for eleven more.
+Exceeding the cap is refused with a plain `PERMISSION_DENIED`, which is exactly
+what a rule saying no looks like. The Console reported the only thing it could
+see.
+
+**Fixed:** the per-field length checks are gone. They cost the most and bought
+least — `hasOnly` is the containment guarantee, Firestore already caps a
+document at 1 MiB, and a Firebase web config is shipped to every browser that
+loads the client's application. What is kept is what decides platform
+behaviour. Verified against the deployed rules: the full document the Console
+writes is accepted, an unknown key is still refused, and `runtimeUrl` set at
+creation is still refused. `manifoldReceiverServiceAccount` joins the other two
+in the update guard and the create-time null checks.
+
+**Note for later:** this ruleset is now close to a limit that fails silently.
+Adding another validated field may reintroduce it, and the symptom will again
+be "your account cannot create projects". If the registry grows much further,
+project writes should move behind the Platform API the way `offeringScope` and
+the Conduit collections already have.
+
+### F-046 · P2 · A client was given a database for a service it does not have
+**Did:** Configured `user-test-1` for Exigence alone, everything else off.
+**Saw:** the data plane planned `citadel-arm` anyway. `_citadelDatabasesFor`
+listed it unconditionally while every other product's database followed its
+toggle — against the argument the template makes in its own comment: *"a client
+who bought ARM alone gets `citadel-arm` and nothing else."*
+
+**Fixed**, with tests, and the corrected plan is **5 to add** and names no ARM
+database. Only visible on a client configured for one service, which is the
+first time that has been done.
+
+### Where `user-test-1` stands
+Created on GCP `testproj-448205` (an existing project of the operator's),
+Exigence enabled and the other three off. The provisioner was granted the ten
+roles it holds on the other client project, and the base APIs enabled.
+
+The data-plane apply then stopped:
+
+```
+Error creating Database: googleapi: Error 403: This API method requires
+billing to be enabled ... testproj-448205
+```
+
+`citadel-exigence` exists — Firestore's first database in a project is
+free-tier — and `(default)`, `citadel-palisade`, Firebase and the web app do
+not. `testproj-448205` has no billing account; `learning-gcp-404803` uses
+`billingAccounts/013BA6-4DC381-53DA60`. **The operator is attaching billing.**
+The build is idempotent, so resuming creates what is missing and leaves the
+rest.
+
+---
+
+## EXIGENCE, END TO END ON A CLIENT BUILT UNDER THE NEW TOPOLOGY — 02/09/26
+
+`user-test-1` on the operator's own GCP project `testproj-448205`, Exigence
+enabled and ARM, Conduit and Baker off. This is the first client created,
+configured and exercised entirely under the 02/09 topology, and the first
+configured for a single service.
+
+### The run
+`exigence.reference.summary` executed and **succeeded**: `fetch`, `summarise`,
+`write`, `notify`, with `write` holding at a real human approval gate until it
+was resolved. The Console lists it as Succeeded, Manual, **USD 0.000303**.
+
+The audit trail is the part worth reading:
+
+```
+fetch      tool.permission.allowed            automation.reference
+summarise  tool.permission.allowed            automation.reference
+write      tool.permission.approval_required  automation.reference
+write      approval.approved                  firebaseIdToken:operator-e2e
+notify     tool.permission.allowed            automation.reference
+```
+
+Each carries `grantedVia`, a reason sentence and an integrity hash. The
+permission gate is recorded in two of its three outcomes, and the approval is
+attributed to whoever resolved it.
+
+**15 of 17 Exigence routes answer**: automations, runs, run detail, spans,
+audit events, approvals, artifact vocabulary, data flows, watchdog
+configuration and ingress, billing summary and per-run execution, artifacts and
+their revisions.
+
+### What refusing well looks like
+Two refusals arrived before anything was spent, each naming the remedy:
+
+- *"The Palisade identity `automation.reference` holds no capability on
+  `user-test-1` … Grant it the capabilities its tools declare — a reading
+  artifact needs at least `exigence.tools.read` — then build."*
+- *"This project has no published Data Handling Boundary named `default`.
+  Publish one before building the service."*
+
+That is F-031 working on a genuinely fresh client.
+
+### F-047 · P2 · A refusal the client's runtime meant was reported as a platform fault
+`watchdog/relay` is a route this runtime does not serve; it answers 404. The
+proxy reported `502 unavailable — "The Exigence private service returned an
+invalid response"`, `retryable: true`. Both halves wrong: a 404 is an answer,
+and retrying cannot change it. The cause was testing the body before the
+status, so a 4xx with a non-JSON body fell into the "invalid response" branch.
+**Fixed** — a 4xx now carries its own status and a code named for it, and is
+not retryable. The upstream body does not travel. Verified live: that call is
+now `404 notFound`, `retryable: false`.
+
+### F-048 · P2 · Two Watchdog surfaces do not answer, and one cannot say why
+On the current runtime image, `watchdog/relay` answers 404 and
+`watchdog/authorization` answers `400 {"error":"invalid_request"}` for a request
+carrying exactly the `from` and `to` it documents as required. `configuration`
+and `ingress` both answer with real content, so this is not a stale image — it
+was rebuilt from source and repinned during this session and the behaviour is
+unchanged.
+
+Two things are worth separating. Refusing rather than returning an empty report
+is **right**, and the source says so: *"'Nothing was denied' is the one wrong
+answer a safety surface can give, and a runtime that cannot answer must not
+appear to have answered."* But `{"error":"invalid_request"}` carries no detail,
+and the handler has two distinct reasons for it — an unsupported query
+parameter, or a missing window. From outside they are indistinguishable, which
+is why this took a direct call to the runtime to characterise at all. The
+sibling `billing/summary` says *"a summary needs a month"*; these should say as
+much.
+
+**FIXED 03/09/26, and the root cause was not the one above.** The operator
+settled the product question — relay is a feature and should work — and the
+handler turned out to be complete all along. Three layers were discarding what
+it said:
+
+1. `PrivateExigencePlatformApi.handle` mapped every error class to a bare
+   `{"error": ...}`, dropping the message its thrower wrote. The three sibling
+   APIs already carried `detail`; this one did not.
+2. The in-route 404 for a deployment with no data-flow audit was likewise
+   detail-free, so "this runtime cannot answer that" and "no such route" were
+   the same response.
+3. **The real cause.** `createHandlerChainHttpServer` treated *any* 404 as "not
+   my path" and moved to the next handler, so a deliberate refusal was walked
+   past and the caller got the chain's plain-text `not found`. That is why the
+   404 looked like an unimplemented endpoint: the runtime had answered, in
+   detail, that the project had published no relay declaration, and the answer
+   was thrown away three lines later.
+
+The chain now steps over a 404 only when it carries no reason — the shape a
+handler uses to decline a path it does not own, which the webhooks depend on —
+and stops at one that does. Verified through the proxy against the live
+`user-test-1` runtime: `{"error":"invalid_request","detail":"from and to are
+required"}` and `{"error":"not_found","detail":"this project has published no
+relay declaration"}`. Guarded by tests in `node_http_server.test.ts` and
+`private_platform_api.test.ts`.
+
+### Onboarding gaps a new GCP project exposed
+None of these were visible while every client lived in one project.
+
+1. **Billing.** `testproj-448205` had no billing account; Firestore's first
+   database is free-tier, so the data plane created `citadel-exigence` and then
+   failed on `(default)`. The operator attached billing and the build resumed —
+   idempotently, creating only what was missing.
+2. **The Cloud Run service agent could not read Citadel's image.** The working
+   project's agent had been granted `artifactregistry.reader` on the
+   `citadel-exigence` repository by hand. Nothing does that for a new client, so
+   the apply created thirty resources and then failed on the service.
+3. **The Cloud Run host suffix is unknowable before the first deploy.**
+   **RESOLVED 03/09/26 — the premise was wrong.** See F-050.
+
+Gaps 1 and 2 still want the same answer: a client bootstrap that does them,
+which is what 0.3.6.a is for. Gap 3 no longer exists.
+
+### A lesson about drift
+The provisioner job's image was updated with `gcloud run jobs update` earlier in
+the session. A later `terraform apply` of the provisioner root silently reset it
+to `var.container_image` — an older build that predates the F-038 fix — and the
+next provisioning run failed with the 409 that fix removed. The digest is now
+pinned in `images.auto.tfvars` and Terraform and reality agree. Out-of-band
+updates to a Terraform-managed resource are exactly the drift the Watchdog
+exists to notice, and they are worth not making.
+
+### F-049 · P1 · The consent step every setup plan needed was not in any of them
+0.3.6.a's server half has existed since 02/09; the Console had no way to reach
+it, so admitting Citadel to a client's Google Cloud project was a thing an
+operator did by hand or not at all. Every plan went straight from "turn it on"
+to "build the data plane" — and Terraform runs as Citadel's own provisioning
+account, which has no standing in a project it has never been admitted to, so
+the build failed on its first API call with a permission error that said
+nothing about the missing consent.
+
+**Fixed.** A shared `_authorizeStep` now sits immediately before the data-plane
+build in all four plans, using the Google Identity Services *token* client:
+JavaScript origins only, no redirect URI, no client secret anywhere in the
+Console. What comes back is an access token with a one-hour life and no refresh
+token behind it, spent immediately by the server and never stored — the
+constraint the server side was already written to. A test asserts the ordering
+per plan rather than merely the step's presence.
+
+Two defects were found by driving the deployed Console rather than by reading
+it. A 403 from this route was being classified as the caller's Palisade
+authority being too narrow, sending the operator to widen a Citadel role that
+has no bearing on whether their *Google* account may administer someone else's
+project; and a timed-out consent window was told, alongside the correct advice,
+to go and check its Google permissions — a second, unrelated accusation. Both
+have tests.
+
+### F-050 · P2 · A per-project value had a default, and the default was another project's
+`run_host_suffix` was a template default set to the *shared* host project's
+suffix, supplied to every client that had none recorded. A client with a project
+of their own therefore deployed cleanly and pointed its task target at a host
+that does not exist — the silent failure where a runtime answers requests and
+never receives its own work. The recorded-value workaround was to deploy a
+throwaway service, read the suffix off it, record it, and rebuild.
+
+**The premise was wrong.** Cloud Run issues every service *two* addresses: the
+opaque `<service>-<hash>-<code>.a.run.app`, and a deterministic
+`<service>-<projectNumber>.<region>.run.app`. Both resolve to the same service —
+checked against a live runtime before anything was changed. Only the first is
+unknowable in advance, and the project number is readable before anything is
+deployed, so the template now composes the second and there is nothing left to
+discover, default, or record.
+
+An earlier note in the provisioner root recorded that this form had been *tried
+and rejected*, because Cloud Run "issued the older per-project hash instead".
+That conclusion was an artefact of the check that tested it: it compared the
+composed URL against the whole of `cloud_run_uri`, which can never match the
+deterministic form by construction. The note has been corrected in place.
+
+Three things were fixed together, and the middle one was found only because the
+first fix deployed a wrong address that the check let through:
+
+- The template derives the address from the client's project number, keeping
+  `run_host_suffix` as an override for a client pinned under the old scheme.
+- **The runner's mismatch check was too weak.** Relaxed to "both hosts start
+  with the service name", it accepted
+  `cit-user-test-1-acb1-runtime-xl7wk7pjxa-uc.a.run.app` — the right service
+  name carrying another project's suffix — and that address was deployed before
+  the gap was noticed. It now reconstructs the deterministic form from the
+  service name, project number and region, and accepts only that or the issued
+  address. The logic moved from `bin/` to `lib/` so it can be tested at all,
+  and the case it let through is now a test.
+- **The runner stopped recording the suffix.** With the address derived there is
+  nothing to tell the next build, and continuing to write it made every
+  alternate build flip the runtime between its own two addresses and roll a
+  revision to do it. The field is no longer in the write mask, so a client who
+  has one keeps it and a client who does not never gets one.
+
+Verified end to end on `user-test-1`: the derived address deploys, a repeated
+plan is a genuine no-op, and a run's first step was enqueued against that
+address and came back `succeeded` — which is the only thing that actually proves
+the runtime can reach itself.
+
+### F-051 · P1 · A client project could not pull the image it was being deployed
+Creating a Cloud Run service checks that the *deploying* identity can read the
+image; starting a revision needs the *client project's own* Cloud Run service
+agent to pull it. Those are different principals and only the first was granted,
+so an apply into a project Citadel had not built in before created thirty
+resources and then failed on the service — the worst place to stop. The one
+project that worked had been granted by hand.
+
+**Fixed, with the operator's approval for the new power.** The runtime template
+grants `roles/artifactregistry.reader` to the client's service agent, on the
+repository the image is actually pulled from — derived by splitting
+`var.container_image`, so the grant cannot name a repository that does not hold
+the image. The provisioner can set that policy through a custom role carrying
+`artifactregistry.repositories.getIamPolicy` and `setIamPolicy` and nothing
+else; `roles/artifactregistry.admin`, which also carries delete on the
+repository and its contents, was deliberately not used.
+
+Verified by removing the hand-made grant for `testproj-448205` and re-running
+the build: the plan was exactly one resource, the apply restored the binding,
+and the runtime still deploys.
+
+### F-052 · P2 · An unbilled project fails nine minutes in, at the least legible moment
+Firestore's first database in a project is free-tier, so a project with no
+billing account creates one database, succeeds, and fails on the second. Nothing
+looked before starting.
+
+**Fixed.** The bootstrap now reads `cloudbilling.googleapis.com` under the
+operator's own token and reports the answer; the consent step shows a warning
+when billing is absent. Reported, never enforced — Citadel cannot attach a
+billing account on a client's behalf, and failing the bootstrap would refuse to
+do the part it can do. Three states, not two: an operator who administers the
+project but not its billing account gets a 403 here, and "could not check" is
+kept distinct from "no billing" because telling somebody their billing is off
+when it is not sends them to fix the wrong thing. The live response shape was
+checked against `testproj-448205`.
+
+### GeoIP — the feature was already complete; only the wiring was missing
+Country resolution turned out to be built end to end: the resolver, the
+catalogue with each candidate's licence and attribution line, the loader that
+refuses a deployment naming one environment variable without the other, the
+Console's per-project switch and disclaimer, and the Terraform module variables.
+The ingest binary already loads it at start and prints which licence it is
+operating under.
+
+The one gap was that the production runtime root never passed the module's
+`geo_database_path` and `geo_database_id` through, so switching it on would have
+meant editing the module wiring rather than setting a value. Both are now root
+variables defaulting to empty. Taking a licence is a `COPY` in the ingest
+Dockerfile and two entries in `terraform.tfvars`; nothing else changes.
+
+No database has been obtained and none is bundled — the operator configures that
+when they take a licence.
+
+### GeoIP — DB-IP Lite taken, and one defect the real file exposed
+The operator chose DB-IP IP to Country Lite on 03/09/26: CC BY 4.0, no account,
+no EULA, and explicit permission to redistribute inside a container image with
+the attribution kept intact. The 2026-09 table is bundled in the ingest image
+(4.3 MB compressed, expanded in the build stage because the final stage is
+`scratch`), with provenance and the attribution in `assets/geo/README.txt`.
+Switched on in production: the service prints `Geo database: DB-IP IP to Country
+Lite, 717152 ranges, Creative Commons Attribution 4.0 International` at start.
+
+**F-053 · P2 · `ZZ` would have been rendered as a country.** ISO 3166-1 reserves
+`ZZ` for "unknown", and DB-IP uses it for the special-use blocks — 18 ranges in
+this table covering RFC 1918 private space, loopback, link-local and carrier
+NAT. It is two letters, so the parser's field validation accepted it, and the
+first session from a private address would have put a country called ZZ in the
+Console's country filter and on the choropleth. The resolver's own contract
+already said the right answer — *"Null rather than `'ZZ'`… an address in no range
+is a gap in the table"* — but only covered addresses in no range, not ranges
+published **as** ZZ. Dropped at parse time. Found by loading the real file, not
+by reading the parser.
+
+**F-054 · P2 · The Console could credit a database the deployment does not carry.**
+**FIXED 03/09/26.** Attribution is discharged per project: the operator switches country
+resolution on, sees the licence dialog, acknowledges it, and the acknowledged id
+is recorded and rendered. But the dialog offers all three candidates, and the
+Console has no way to learn which database the ingest deployment actually holds
+— that is a server-side environment variable. An operator who acknowledges
+IP2Location while the image carries DB-IP publishes a false credit and fails
+DB-IP's attribution requirement at the same time. The fix is for the platform to
+expose the configured database id so the Console offers only that one; it is a
+new field rather than a change of behaviour, and it is worth doing before a
+second database is ever bundled.
+
+### The Manifold receiver, provisioned and proven for the first time
+It had never been deployed. Enabling it creates the platform's only `allUsers`
+Cloud Run service, so it was built on `user-test-1` with the operator's explicit
+approval, verified, and destroyed — no public endpoint was left standing.
+
+Manifold is not one of the four offerings; it is a capability of the Exigence
+runtime template, so building it did not contradict `user-test-1` being an
+Exigence-only client.
+
+The apply created exactly ten resources, all the receiver's own — its service
+account, its logging and Firestore roles, the media bucket and its binding, the
+`actAs` binding, the settle delay, the service, the `allUsers` binding and the
+Cloud Tasks enqueuer — and touched the existing runtime not at all. The teardown
+destroyed exactly the same ten.
+
+What the branch was proven to do:
+
+- **It boots with no channel published.** This is the documented and correct
+  first state: refusing to boot there had made the provision itself
+  un-appliable, because the receiver would crashloop before anyone could publish
+  the channel that would satisfy it. Every webhook path 404s until one exists,
+  and a channel published later becomes reachable with no redeploy, because
+  channels resolve per request from published revisions.
+- **It is reachable without authentication**, which is the whole point of it and
+  the reason it is a separate service.
+- **It exposes nothing else.** `/v1/projects/user-test-1/exigence/runs` on the
+  public service answers 404: the private runtime's routes are not on it. That
+  is the property that makes an `allUsers` service acceptable at all, and it had
+  never been checked against a running one.
+- **The runtime was unaffected** throughout, before and after.
+
+Still unproven, and only provable with real credentials: signature verification
+on an actual Meta delivery, and media collection into the bucket. Both need a
+published channel with its secrets, which is a client action.
+
+### F-054, fixed
+The Platform API now reports `deployedGeoDatabaseId` on
+`GET /v1/projects/{id}/conduit/context`, and the licence dialog states that
+database rather than offering a choice of three. Both the API's value and the
+ingest service's `CITADEL_CONDUIT_GEO_DATABASE_ID` come from one root variable,
+`conduit_geo_database_id`, passed to both modules — which is what makes it
+impossible for the id the Console credits and the file actually loaded to
+disagree.
+
+Deliberately reported outside `context` rather than stored on the project: it is
+a fact about the deployment, and a copy kept per project is precisely the value
+that would drift from the file in the image.
+
+When the platform cannot answer — an older revision, or a deployment carrying no
+database — the id is empty, and the dialog says it cannot check the choice and
+points at the ingest service's start-up log, which names the file. Empty is never
+resolved to a default: falling back to the first entry would silently credit
+DB-IP on a deployment carrying something else, the same failure in a quieter
+form.
+
+Verified in the deployed Console against `test-sandbox`: the dialog reads
+*"DB-IP IP to Country Lite — the file this deployment carries"*, with CC BY 4.0,
+the exact attribution line, and no dropdown. Cancelled rather than accepted —
+the record names who took the licence on for the client, and that has to be an
+operator.
+
+### A hosting deploy that dropped the SPA rewrite — and how it was caught
+The Firebase CLI was, mid-session, authenticated as an account with no access to
+`citadel-platform`, so a Console deploy was made through the Hosting REST API
+under the correct identity instead. It worked and served a byte-identical
+bundle — and 404'd every path but `/`.
+
+`firebase.json`'s `rewrites` and cache `headers` are applied by the CLI; the API
+does not infer them, and a version created without a `config` serves files
+only. The Console is a single-page app whose routes have no files behind them,
+so every deep link broke. Caught by opening one rather than by the checks that
+had just passed: `curl /` was 200, the bundle hash matched, and both were true
+of a site nobody could navigate.
+
+Fixed by supplying the same config on the version, then redeployed through the
+CLI once the operator corrected the login, so the config comes from
+`firebase.json` and not from a second copy of it in a script. The lesson is the
+narrow one: a deploy path that reproduces the artefact is not the same as one
+that reproduces the *serving behaviour*, and only a request to a non-root path
+tells them apart.
+
+## 03/09/26 — Manifold and WhatsApp, driven end to end
+
+Everything below was found by publishing a real channel against a real Meta
+sandbox WABA and sending real messages through it. None of it was visible from
+the test suites: 930 Exigence unit tests, 473 Console tests and 500 Platform API
+tests were green throughout, before and after each fix. The receive path had
+never been executed against Meta, and every defect lived in the seam between
+services rather than inside one.
+
+Read as a group, they have one shape. The 02/09/26 decision moved a client's
+data into a project of their own, and each of these is a place where something
+did not move with it, or was never built at all because nothing had exercised
+it. That is the risk the decision carried, and this is the bill for it.
+
+**F-056 · P0 · No channel could be published, for any client.**
+Publishing verifies the credentials against Meta first, and that call is made
+from the Platform API — the control plane, because that is where the operator
+is. The runtime template bound the receiver and the runtime to a channel's
+secrets and never the API. So verification failed on its first read, publication
+is gated on verification, and no WhatsApp channel had ever been published in any
+client project. Invisible because nobody had tried.
+
+Fixed by binding the Platform API's service account to exactly the secrets a
+channel names, per-secret and `secretAccessor` only, through a new
+`manifold_verifier_service_account` that arrives from `template_defaults` and is
+not in the API's accepted variable list — a caller who could name it could point
+a client's channel secrets at an identity of their choosing.
+
+The security shape is inherent and worth stating plainly: verify-on-publish
+means the control plane reads a client's WhatsApp access token. That is the
+design's own consequence rather than something this grant introduced, and it is
+recorded here as a decision. The bounding that makes it acceptable is that this
+identity — shared by every client — never holds a project-wide grant anywhere.
+
+**F-058 · P0 · Enabling Manifold never created the database Manifold writes to.**
+Product databases come from `client-data-plane`, out of a set the Console
+composes from the client's *enabled offerings*. Manifold is not an offering, so
+nothing ever named `citadel-manifold`. Enabling Manifold deployed a receiver,
+granted two services on that database, pointed the runtime at it, and left it
+uncreated. The service started, passed its health check, verified a signature,
+and failed on the first customer message.
+
+Fixed by creating it in `exigence-runtime`, where Manifold is switched on, so
+that one rule holds: switching Manifold on builds everything Manifold needs, in
+the build that switches it on.
+
+**F-060 · P0 · No secret has ever been readable from the runtime.**
+`GoogleSecretVersionAccessor` asked for `accessSecretVersion` with POST. It is a
+GET, and Google's frontend answers an unmatched method on a `:verb` path with a
+404 *HTML page* rather than a 405 — so the failure surfaced as
+
+    the verify token could not be read: <!DOCTYPE html>
+
+which reads as a missing secret or a missing grant, and sent the investigation
+to Secret Manager's IAM policy twice before anyone looked at the method. Every
+WhatsApp token, every signing secret and every webhook trigger secret is read
+through this one class. It is constructed only in the runtime bootstrap, so
+every unit test injected a fake and it had never once been called.
+
+**F-061 · P0 · The receiver was granted on the wrong database.**
+It reads the published channel from the client's control database and writes the
+conversation into Manifold's, and had only the first. A delivery arrived,
+verified, passed its signature check, and died writing the message — a 500,
+which Meta retries, indefinitely, for a message that can never land.
+
+**F-063 · P0 · Every Manifold mutation from the Console was refused.**
+The actor the Platform API forwards is `<credentialType>:<subject>` —
+`firebaseIdToken:...` for a signed-in operator. `manifold_api.ts`,
+`billing_api.ts` and `knowledge_base_api.ts` each validated it with the plain
+identifier pattern, which has no colon, so every reply, note, assignment and
+draft came back `400 trusted actor required`. Manifold's entire write surface
+was unusable.
+
+This is a recurrence. `validation.ts` already carries `actorIdPattern` for
+exactly this reason, and its own comment records that the rule had been restated
+in three places and that fixing one copy only moved the refusal one layer
+deeper. Three further copies were missed then. The test added now reads the
+sources and fails on any module that spells the rule out again, because the
+defect is a copy of a rule rather than a wrong answer from any one function.
+
+**F-066 · P0 · A delivery status disabled the webhook.**
+Recording a status means finding the message it names across every thread — a
+collection-group query on `messages` by `providerMessageId`. Firestore indexes
+every field of a collection automatically and indexes none of them across
+collection groups, so that query failed with `FAILED_PRECONDITION`. Meta sends a
+status for every message a business sends; each one 500'd, Meta retried, and
+enough consecutive failures has Meta disable the webhook — which is the inbound
+path too. **A business that sent a single reply would have stopped receiving.**
+Found by sending one.
+
+**F-062 · P1 · Four operational reports went nowhere, in every deployment.**
+`runtime_entrypoint` is the only production caller of either compose function
+and passed no `logger`. Every report the composition makes is written as
+`args.logger?.error(...)` — optional on purpose, because none is worth failing a
+request over — so each became a no-op: a receiver started with no channel at
+all, a customer's WhatsApp message that no artifact answered, the same for
+email, and a cost record that could not be written. Each is a case the code
+deliberately does not throw on, which makes the report the only trace it leaves.
+
+**F-064 · P1 · The Console dropped the reason on every Exigence failure.**
+The platform answers `{code, message}`; Exigence and Manifold answer
+`{error, detail}`. Only the first was read, so a refusal arrived as
+*"The Exigence API request failed (400)."* with the sentence that said why left
+unread in the body. Carrying `detail` that far was the whole point of the F-048
+work; this was the last hop it never made.
+
+**F-065 · P1 · A refusal from Meta was rendered as a Palisade problem.**
+The API answered 403 with `refused` and Meta's own words — *"(#133010) Account
+not registered"* — and the Console said *"Not permitted — Your access does not
+cover this"*, then sent the operator to Palisade to add a role. No role in
+Palisade registers a phone number with Meta. 403 is the right status for both a
+missing grant and a downstream refusal, which is exactly why only the body can
+tell them apart. Same defect as F-049, one layer out.
+
+### F-057, closed — the record moved to the client's database
+
+The Platform API writes channel revisions to Citadel's own registry. The
+receiver reads them from the client's control database, which is the only one it
+is granted on. **A published channel is therefore invisible to the receiver that
+serves it**, and every delivery is refused with *"the channel is not published,
+is disabled, or is another project's"*.
+
+The receiver's side is not movable: its Firestore grant names one database under
+an IAM condition, and that condition is what stops one client's public service
+reading every other client's channel tokens. So the record has to reach the
+client's database. How it gets there is the open question, and the two answers
+differ in what the control plane ends up holding:
+
+* **Grant the Platform API `datastore.user` on the client's control database.**
+  About thirty lines, reusing the F-056 shape. Firestore IAM can name a database
+  and cannot name a collection, so this is read/write over that client's whole
+  Exigence control database — artifact revisions, configuration, approval
+  routing, runs — for an internet-facing service, bypassing every invariant the
+  runtime enforces.
+* **Publish through the client's runtime.** The Platform API already resolves a
+  per-project OIDC client to the runtime, and this is how artifact revisions are
+  already published. The control plane gets no Firestore access to client data
+  at all. It costs a new private route, a client for it, and the ordering
+  question of what happens when the registry write and the push disagree.
+
+The second was chosen, and taken the whole way: **the registry copy is gone**.
+The client's database is the single home for a channel record, the Console
+lists channels through the runtime the way it already lists conversations, and
+the control plane holds no Firestore access to client data at all.
+
+Going the whole way rather than dual-writing settles something a dual write
+could not. The revision number is computed from a listing, and with two stores
+the registry computes it while the runtime accepts whatever it is told — two
+operators publishing at once produce two revision 3s in the store that
+matters. With one store the document id is derived from project, channel and
+revision, the write is a create rather than a set, and the second publisher is
+refused with a conflict they can see instead of silently overwriting the first.
+
+What it cost: a pair of routes on the runtime's private API — one to list the
+stored revisions, one to write a single revision once — and a
+`ManifoldChannelStore` seam in the Platform API with two implementations, the
+runtime-backed one for every client and the registry one kept for the emulator
+tests, which have no runtime to publish through. The store is a required
+constructor argument rather than a defaulted one, for the reason this finding
+exists: a default that points at the wrong store still writes, still returns,
+and only fails at somebody's first customer message.
+
+Two details worth keeping:
+
+* The payload crosses as the string it was hashed over and is stored as that
+  string, never re-encoded. The digest is an attestation over those bytes, and
+  a round trip through the runtime's own JSON would be a second chance for the
+  record and its attestation to disagree.
+* Publishing carries two identities. `actorId` is the operator's email, which
+  is what the record says published it; `principalId` is the authenticated
+  principal, which is what the runtime's actor rule accepts — an email is
+  refused there, because it has an `@` in it. That is F-063 again, and the
+  reason the two are separate parameters rather than one.
+
+Testing had continued past it by mirroring the published revision into the
+client's database by hand, which is what let everything above be found. That
+mirror is now what the code writes on its own.
+
+Exercised live, end to end. Revision 3 of `Citadel Test Line` was published
+from the deployed Console against the real Meta sandbox WABA: the credential
+check passed, the publish returned 200, and the record was written **into the
+client's `citadel-exigence` database and nowhere else** — the registry received
+nothing. A signed delivery to the public receiver then bound to
+`channelRevision: 3`, which is the whole claim: the record the control plane
+wrote is the record the receiver reads.
+
+With that proven, the registry's two remaining copies (revisions 1 and 2) were
+deleted, and the `manifold_channel_revisions` collection in Citadel's own
+project is now empty. The delivery matrix was re-run afterwards and is
+unchanged at 17/17, which is what confirms nothing was still reading them.
+
+### The Manifold enablement gap
+
+`manifold_enabled` is accepted by the Platform API and set by no Console
+surface, and `ExigenceProjectScope` has no field for it. Manifold can only be
+switched on by a hand-made provisioning request. Related: a published line
+cannot be edited from the Channels page — the row is inert, and "Add line"
+opens an empty form, so enabling an existing line means retyping its whole
+configuration including three Secret Manager version names from memory. That is
+how revision 2 was published today.
+
+### What was proven live
+
+Against the deployed receiver in `testproj-448205`, with a real Meta sandbox
+WABA:
+
+* The verification handshake, including **by Meta itself** — the webhook
+  subscription was created through the Graph API, which only succeeds if Meta's
+  own GET against the live receiver is answered correctly.
+* 17/17 on the delivery matrix: correct signature accepted; unsigned, tampered,
+  wrong-secret, all-zero and prefix-less signatures each refused; a replayed
+  message id accepted and deduplicated to one stored message; `PUT` refused;
+  the mount with no channel left to the rest of the server; and none of the
+  runtime's own routes reachable on the public service.
+* Every refusal answers identically — `403 forbidden`, with the reason only in
+  the log. Confirmed by driving the "no such channel" and "wrong token" cases
+  side by side and finding them indistinguishable from outside.
+* Statuses, empty changes, unsupported message types, an unfetchable attachment
+  and an opt-out all accepted, so none of them has Meta retry.
+* The full inter-service round trip: a signed delivery to the public receiver,
+  written into the client's Manifold database, read back through the Platform
+  API and the client's runtime into the Console inbox, replied to from that
+  inbox, and accepted by Meta — `delivery.state: sent`, `sentBy
+  firebaseIdToken:...`, which is the very actor shape F-063 was rejecting.
+
+### Manifold became an offering of its own
+
+It was a platform-native surface: every project saw an Inbox and a Channels
+page whether or not one had a receiver, and `manifold_enabled` was a variable
+the Platform API accepted that no Console screen ever set. So the only way to
+switch Manifold on was a hand-made provisioning request, which is how the one
+client that has it got it.
+
+It is now `Offering.manifold`, with `ManifoldProjectScope`, a setup plan, and
+the same enablement, disablement and settings surfaces every other service has.
+What that buys beyond a button:
+
+* Its pages are gated on it, so a project with no receiver is not offered an
+  inbox it cannot fill.
+* `platform.manifold.*` permissions mask when it is off, like every other
+  product's — matched on the two-segment prefix rather than renamed, because
+  those names are in published Palisade roles and renaming a permission
+  silently removes it from everyone holding it.
+* A 403 while Manifold is off now reads as "not switched on" rather than
+  sending the operator to Palisade to widen a role that would not help.
+
+The plan states the dependency it has on Exigence on its first screen, as a
+blocking check, rather than letting an apply half-succeed: Manifold's receiver
+is the same runtime image in webhook mode and enqueues onto the Exigence
+runtime's queue, so without one it would accept a customer's message and have
+nowhere to put it.
+
+The one field it asks for is how long a customer's attachments are kept, and
+empty means indefinitely. Zero is refused rather than read as "forever" —
+those are opposite instructions, and a field where one can be mistyped into the
+other is the wrong place to be lenient.
+
+`citadel-manifold` is still created by `exigence-runtime` rather than named in
+`client-data-plane`'s database list like every other product's. That is
+deliberate now rather than incidental: Manifold cannot be enabled without
+Exigence, so its database is always created by the build that turns it on, and
+one creator is better than two agreeing by convention.
+
+### Manifold left the Exigence scope entirely (04/09/26)
+
+`manifoldReceiverServiceAccount` moved to `ManifoldProjectScope` as
+`receiverServiceAccount` — the `manifold` prefix was only ever there because
+the field was living somewhere it did not belong. The provisioning runner now
+writes it under `offeringScope.manifold`; every reader falls back to the old
+path, because a client provisioned before the move has it there and nowhere
+else, and this is the principal that publishing a channel checks against each
+secret's IAM policy. Reading only the new name would report every one of their
+channels as broken and offer a repair for a grant already in place.
+
+Moving it surfaced two defects the offering change had left behind:
+
+**The Console never learned the Manifold scope at all.** Its own Firestore
+codec encoded and decoded `arm`, `conduit`, `exigence` and `baker`, so the
+Console read Manifold as off on every project regardless of what was stored —
+and a project settings save, which rewrites `offeringScope` wholesale, would
+have deleted the scope outright.
+
+**The registry rules refused it.** `isValidOfferingScope` ends in
+`keys().hasOnly([...])`, and `manifold` was not in the list, so any project
+write carrying it was denied. Firestore reports that as a permission denial and
+the Console tells the operator their account may not create projects — which is
+the third time this exact gap has silently broken every project write.
+
+`platform_rules_contract_test` exists to catch precisely that, and did not,
+because its list of offerings was a hardcoded copy that went stale the moment
+Manifold was added. It now derives the list from `Offering.values`, and was
+confirmed to fail against the old rules before the fix went in. A fourth
+occurrence cannot happen the same way.
