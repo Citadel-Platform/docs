@@ -2796,3 +2796,42 @@ change what a teardown does and that is not a decision to make at 2am.
 
 **Not blocking:** every service is deployed and healthy on the intended images.
 This costs a red provisioning job on re-apply, not an outage.
+
+### F-084 · P1 · The agent could decide to reply and not be allowed to
+**Did:** Set the agent to answer unattended and sent a real WhatsApp message.
+**Saw:** the run recorded a decision to reply, six `channel.send` attempts, and
+no message. Secret Manager refused every one:
+`Permission 'secretmanager.versions.access' denied`.
+
+`exigence-agent` passes `manifold = null` to the runtime module, with a comment
+explaining that an agent does not receive customer messages on its own line.
+That is true about *receiving* and wrong about everything else the block
+carries — null also removed the channel secret grants an agent needs to
+**send**. The client's own runtime has them, for exactly the reason the module
+states beside them: "the private runtime sends replies, so it reads the same
+channel secrets."
+
+What made it hard to see is the order. The approval gate said yes, the policy
+said yes, the tool was called — and the refusal came from Secret Manager after
+everything that reports on authority had already reported success.
+
+**Fixed:** one grant per published secret, resolved by the Platform API from
+the channels the project has actually published. Never project-wide and never a
+caller's to name; either would let one client's agent read another client's
+tokens. Two shape tests hold it.
+
+### F-085 · P2 · An agent that reaches its ceiling strands its run
+**Saw:** `JournalValidationError: run has no step step-7.decide`, three times,
+on an agent published with a six-step ceiling. All six `act` steps sat at
+`running` and the run never moved again.
+
+Refusing the seventh step is right — the ceiling is stated three times and
+checked twice precisely so a graph cannot walk past it. What is wrong is what
+happens next: the refusal throws, the six in-flight activities are never
+resolved, and the run is left in the state F-080 describes, which cannot be
+cancelled either.
+
+**Not fixed.** Reaching the ceiling should end the run the way any other
+terminal condition does — recorded, compensated if needed, and closed. It
+currently ends the *process* and leaves the run open. This shares a cause with
+F-080's other half and is probably worth fixing together.
