@@ -2521,3 +2521,199 @@ because its list of offerings was a hardcoded copy that went stale the moment
 Manifold was added. It now derives the list from `Offering.values`, and was
 confirmed to fail against the old rules before the fix went in. A fourth
 occurrence cannot happen the same way.
+
+## The findings backlog, written up — 04/09/26
+
+F-067 through F-079 were found between 03/09 and 04/09 and lived only in commit
+messages and code comments until now. That is the gap this section closes, and
+the reason it matters is three lines up the page: the Manifold rules gap reached
+production **three times**, and each time the note explaining the previous one
+was somewhere nobody looked.
+
+**F-074 is not here because it does not exist.** No source file, test or commit
+in any repository references it. Recorded as unused rather than left as a hole
+somebody later assumes was lost.
+
+### F-067 · P1 · The fourth copy of the actor rule, one indirection below the third
+**Did:** Followed F-063 through to the conversation workspace.
+**Saw:** F-063 fixed three copies of the actor pattern — `manifold_api`,
+`billing_api`, `knowledge_base_api` — and its own comment warned that restating
+the rule only moves the refusal one layer deeper. It did exactly that. Those
+three let the actor through and the conversation workspace store, one call
+further down, threw it out on the same `<credentialType>:<subject>` colon.
+
+**Fixed:** the shared pattern is imported rather than restated, and
+`conversation_workspace_actor.test.ts` fails if a principal is ever checked
+against the identifier pattern again — so a fifth copy cannot be written.
+
+### F-068 · P2 · The inbox answered once and then stopped asking
+**Did:** Left a Manifold inbox open and had a customer write in.
+**Saw:** `platformManifoldConversationsProvider` was a plain
+`FutureProvider.family`, so the listing resolved once and was held for the life
+of the tab. The operator went on seeing the inbox as it was when they opened it,
+with nothing on screen saying the answer was old — while the thread panel below
+refetched on open, so one screen showed two different times for one conversation.
+
+**Fixed:** the listing can be asked again, and a test holds it to that.
+
+### F-069 · P1 · A build that said nothing about the channel secrets revoked them
+**Did:** Ran an ordinary provisioning job on a project whose Manifold channel
+was already verified and working.
+**Saw:** the secret grants disappeared. They were resolved only by the repair
+that first granted them, so every subsequent plan omitted them — and Terraform
+removing what a plan does not mention is Terraform working correctly.
+
+**Fixed:** every provisioning plan resolves them, not only the repair.
+
+### F-070 · P2 · The inbox named people by things that are not their names
+**Did:** Read the Assigned column.
+**Saw:** `VqvN416TBGS1huUVOz9UUa9p2P62`, and a thread log reading
+`firebaseIdToken:VqvN416... assigned VqvN416...`. Both correct, neither usable:
+an operator scanning for an unheld thread could not tell one colleague from
+another, or either from themselves.
+
+**Fixed:** people are named by email, as Palisade identities, grants,
+`publishedBy`, `createdBy` and every audit event already are.
+
+### F-071 · P1 · An agent could not be bound to a channel, so nothing answered
+**Did:** Tried to make an agent answer a WhatsApp line.
+**Saw:** no way to say which channel an agent answers. The receiver had to
+assume the runtime a delivery arrived at was the one that served it, which for
+an agent is exactly what is not true.
+
+**Fixed:** an agent declares its channel in its own published configuration, so
+the receiver can find which artifact a delivery belongs to.
+
+### F-072 · P1 · A customer's message started a run that could never take a step
+**Did:** Sent a real signed WhatsApp webhook at a real receiver.
+**Saw:** the run started and died. A runtime serves exactly one artifact and
+refuses every other; the receiver starts runs for whichever artifact answers a
+channel, which is routinely not the artifact its own runtime hosts. The delivery
+was refused identically on every retry until the queue gave up.
+
+The first fix set the task's target URL and did not work, which took a while to
+understand: **every Exigence queue carries a Cloud Tasks `uriOverride` with
+enforce mode `ALWAYS`**, which rewrites the host of every task it dispatches and
+mints the token for that host. A task addressed elsewhere and placed on this
+queue is delivered here anyway. Setting the address on the task is not merely
+insufficient — it is ignored.
+
+**Fixed:** routing is the queue. Each agent gets its own, and the receiver reads
+the route per dispatch rather than at boot, because an agent may be provisioned
+or torn down long after the receiver started.
+
+Then it still failed, and the second half is worth its own paragraph: the
+receiver had `cloudtasks.enqueuer` but not `actAs` on the agent's invoker
+service account. **Cloud Tasks reports that missing `actAs` as
+`PERMISSION_DENIED` on `cloudtasks.tasks.create`, naming the queue and saying
+nothing about the account** — so the enqueuer grant read as correct and complete
+while every delivery was refused. Ruled out IAM propagation, deny policies and
+stale revisions before checking the invoker's own policy. `exigence-runtime`
+grants the pair together; the agent template had copied only the first.
+
+### F-073 · P1 · A template that had never been applied, and could not have been
+**Did:** Applied `exigence-agent` for the first time.
+**Saw:** fifty-six `exigence-runtime` jobs and sixteen `client-data-plane` jobs
+had run against zero for this template. Applying it took six plan/apply cycles
+and surfaced a duplicate `output` block, F-072's missing grant and F-076.
+
+**Fixed:** `template_validity_test` stages every template the way the image
+stages it — reading the stagings out of the Dockerfile so the two cannot drift —
+and runs `terraform init -backend=false` and `terraform validate`. Templates are
+discovered, not listed. Three validate in about eleven seconds, and it was
+confirmed to fail against the duplicate output that cost a full build, deploy
+and plan cycle to find.
+
+### F-075 · P2 · A runtime's address was discovered when it could be derived
+**Did:** Traced why building for a new client needed a throwaway deployment.
+**Saw:** Cloud Run issues every service two addresses — the opaque
+`<service>-<hash>-<region>.a.run.app` and the deterministic
+`<service>-<projectNumber>.<region>.run.app`. Only the first is unknowable
+before a deploy, and building on it forced deploy-read-record-rebuild for every
+client in a project Citadel had not built in before.
+
+Continuing to record it did active harm: the derivation composed the second form
+and the recorder wrote back the first, so every alternate build flipped the
+runtime between its own two addresses and rolled a revision to do it. Both work,
+which is what would have made it puzzling to find.
+
+**Fixed:** the address is derived from the project number, readable at plan
+time. A client whose suffix was recorded under the old scheme keeps it.
+
+### F-076 · P1 · An agent could not ask what its own artifact may do
+**Did:** Fixed F-072's routing and sent the message again.
+**Saw:** the delivery reached the right runtime and the run still died — a 403
+from the Platform API's principal authority. `exigenceRuntimeServiceAccounts`
+was plural in name and returned a set, but only ever yielded the project's own
+runtime, so an agent running as its own identity was refused the one question a
+run must answer before its first step. **The delivery had been routed correctly
+by then, which is what made this look like a routing bug** right up until the
+queue grants were right and the run still would not start.
+
+**Fixed:** an agent's identity is recorded in Citadel's own registry, one
+document per artifact. Deliberately not the client's database — that holds the
+agent's route, which the client's runtime writes, and a value the client's
+runtime could write is not one the platform may trust to decide who may ask
+about another principal's authority. A record naming anything that is not a
+service account address grants nothing.
+
+### F-077 · P2 · An agent that answers a channel could not answer unattended
+**Did:** Watched two successful channel runs stop at `awaiting_approval`, held
+on `channel.send`.
+**Saw:** correct, and the whole point of the effect boundary — but it means a
+customer-facing line cannot hold a conversation without an operator releasing
+every message.
+
+**Fixed:** `replyApproval` is a published choice. `held` keeps the existing
+behaviour; `automatic` lets the agent answer by itself. The choice is stated
+twice — declared on the graph and expressed in the policy — and the runtime
+refuses a revision where the two disagree, because the policy alone would make
+the difference between "answers by itself" and "waits for a person" a permission
+missing from a list, which is indistinguishable from an oversight on the one
+decision where an oversight puts unreviewed words on a stranger's phone. Holding
+remains what a caller who says nothing gets.
+
+### F-078 · P1 · An agent's runtime was a resource nobody could see
+**Did:** Audited what a second artifact in one project exposed.
+**Saw:** the inventory reported exactly one Exigence runtime per project, from
+`offeringScope.exigence.runtimeUrl`. Every agent is a second always-on Cloud Run
+service the client pays for and the operator's own inventory does not show. The
+live check matched deployed services against that one recorded address, so an
+agent whose service was deleted drifted with nothing to notice — **F-001 asked
+for that drift as a first-class finding, and it was reintroduced one artifact at
+a time.**
+
+**Fixed:** the runner records each agent's address beside its identity; the
+inventory emits a node per agent, sorted so it does not reorder between reads;
+the observer matches each agent's service the same way it matches the project's
+own.
+
+Worth recording: the first version of the drift check was nested inside
+`if (recordedRuntimeUrl != null)`, so an agent would not have been observed
+unless the client had a runtime of its own — **the same "per project" assumption,
+one level down, written by the change meant to remove it.** The listing is now
+gated on the project's own address *or* any agent's, with a test for exactly
+that case, confirmed to fail against the nested version.
+
+A second defect found while evaluating the cost of all this: both new readers
+used one `list` with `pageSize: 100` and no page token, so a project's hundred
+and first agent would have been absent from the inventory and refused authority
+— F-076 again with a page boundary for a cause. Both now share one helper that
+follows the pages.
+
+### F-079 · P1 · A settings save could silently drop an offering
+**Did:** Hunted the remaining hardcoded enumerations after Manifold.
+**Saw:** `ProjectOfferingScope` is freezed with a default on every field, so a
+construction that omits one **compiles** and silently resets that offering. The
+settings screen rewrites `offeringScope` wholesale, so an omission there does not
+read as "unchanged" — it deletes what the operator had. That is exactly how
+Manifold was dropped: the Console's codec knew only `arm`, `conduit`, `exigence`
+and `baker`, so it read Manifold as off on every project regardless of what was
+stored.
+
+The compiler cannot catch an absence and a reviewer has to notice one.
+
+**Fixed:** the settings encoder is checked against `Offering.values`, so a sixth
+offering fails a test rather than a customer's project. Confirmed to fail with
+`manifold` removed. The three other constructions that omit offerings are seed
+data, where showing an offering as off is honest — checked, left alone.
