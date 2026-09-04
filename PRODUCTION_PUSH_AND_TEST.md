@@ -2831,7 +2831,27 @@ happens next: the refusal throws, the six in-flight activities are never
 resolved, and the run is left in the state F-080 describes, which cannot be
 cancelled either.
 
-**Not fixed.** Reaching the ceiling should end the run the way any other
-terminal condition does — recorded, compensated if needed, and closed. It
-currently ends the *process* and leaves the run open. This shares a cause with
-F-080's other half and is probably worth fixing together.
+**Not fixed, and smaller than it first looked.** The looping was a *symptom*:
+`channel.send` was failing, the agent retried, each retry spent a step, and the
+ceiling was reached. With the send working the same agent answers once and the
+run succeeds at sequence 28 — it does not walk to its ceiling at all.
+
+What remains is real but narrow: when a tool fails repeatedly and the ceiling
+*is* reached, the refusal throws and the run is left open with its activities
+in flight, which is the state F-080 describes and cannot be cancelled either.
+Reaching the ceiling should end the run the way any other terminal condition
+does. Worth fixing with F-080's other half, and not urgent on its own.
+
+### And one thing that was not a defect at all
+
+Twelve `channel.send` spans failed before any of this was understood, and the
+cause was the platform working correctly: the test recipient was recorded
+`opted_out` from a "STOP" sent during earlier testing on 03/09. Every reply was
+refused because the person had asked not to be messaged. Sending "start" from
+the same number recorded `opted_in` and the next question was answered.
+
+Worth writing down because it cost an hour of looking for a bug in the send
+path. A refusal that is correct and a failure that is not look identical from
+a span with `status: error` and nothing else on it — the consent refusal
+carries its reason and the span does not keep it.
+
