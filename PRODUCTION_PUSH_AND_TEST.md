@@ -2895,7 +2895,7 @@ agent gets its own policy resource — pricing and adapters stay shared, because
 a price profile belongs to the deployment, but a policy says what *this* agent
 may do and two agents sharing one would mean changing one changed the other.
 
-### F-087 · P1 · Publishing a second agent conflicts on the shared versions — OPEN
+### F-087 · P1 · Publishing a second agent conflicts on the shared versions — FIXED
 **Did:** Published the second agent for real, with F-086 fixed.
 **Saw:** `immutable configuration version conflicts`.
 
@@ -2924,7 +2924,122 @@ identity is supposed to be its coordinates.
   `publishArtifactBundle` and the bundle builders, so it is a real piece of work
   rather than a patch.
 
-**Until this is fixed a client can have exactly one agent.** Everything the
-routing, authority, inventory and secret work of 04–05/09 was built for is in
-place and correct; this is the one thing standing between it and being usable.
-It is the first thing to do next.
+**Fixed by the second, on 05/09.** The store adopts an existing version whose
+*value* matches and hands it back as the version of record; `publishArtifactBundle`
+re-pins the revision to the digests that came back. Two agents that genuinely
+disagree about a shared resource still fail, now with `SharedResourceConflictError`,
+which `isAlreadyPublished` excludes — it reports `conflict` like a lost race and
+means the opposite.
+
+**Proven live**, not in a test. `user-test-1`'s second agent published with all
+four shared versions reported as adopted, and both superharness revisions now
+pin the same provider, pricing and adapter. The same publish had failed with
+`immutable configuration version conflicts` an hour earlier.
+
+Rollback needed fixing alongside it: it refused only when *this artifact* had a
+published revision, so with sharing reachable it would have deleted the first
+agent's provider out from under it. It now refuses when any revision in the
+project pins the coordinates.
+
+---
+
+## 05/09/26 — adding an agent, and what live driving found
+
+F-087 unblocked the thing the whole of 04/09 was for. What followed was the
+work to make it usable, and four defects that only appeared by doing it.
+
+### F-088 · P1 · Adding an agent was command-line only — FIXED
+**Did:** Went to add a client's second agent from the console.
+**Saw:** No surface for it. An agent was published by `tool/publish_superharness_configuration.ts`, run with the client's Palisade coordinates typed out by hand.
+
+`POST /v1/projects/{id}/exigence/agents` publishes revision 1 of a new
+superharness artifact, gated on `exigence.agents.publish` — the permission that
+already existed for this, held apart from `automations.update` because somebody
+who may flip an existing agent's switch is not thereby somebody who may stand up
+another one that talks to a client's customers.
+
+The caller states what the agent is *for*: instructions, ceiling, whether replies
+wait for a person, which channel it answers. It does not state what the agent may
+*do* — identity and the three boundary revisions come from the deployment's
+environment, which is Terraform's, which is the plan an operator approved. The
+same rule the platform API already applied to provisioning, applied to the other
+way an artifact comes into being. Unknown body keys are refused rather than
+dropped: a dropped key reports an agent created with a setting it does not have.
+
+`/exigence/agents/new` is a page, not a dialog — an agent is defined by a
+paragraph somebody writes and rereads. It ends by saying the agent has no runtime
+yet and answers nothing until one is built, because an agent that exists with
+nowhere to run looks finished from that page.
+
+### F-089 · P2 · Two agents both called "Superharness" — FIXED
+**Did:** Opened Artifacts with two agents published.
+**Saw:** Two rows reading "Superharness", told apart only by the artifact id underneath.
+
+`displayName` was a constant. It is now the name the operator typed — the same
+name the artifact id is slugged from. A blank name is absent rather than empty:
+an agent with no label at all reads worse in a list than the default it replaces.
+
+### F-090 · P1 · Every client build downloaded its providers from the public registry — FIXED
+**Did:** Ran the Exigence build for `user-test-1` from the console.
+**Saw:** "Inconsistent dependency lock file", naming providers with no version selected.
+
+That message was a consequence, not the cause. The logs said
+`429 Too Many Requests returned from registry.terraform.io`: `terraform init`
+runs in a fresh container with no plugin cache, so every client build downloaded
+every provider again, and the registry rate-limits that. The empty lock file is
+what a failed download leaves behind.
+
+**Two things were wrong.**
+
+*The providers were fetched at run time.* They are downloaded once at image build
+now, mirrored into the image, and served from a `filesystem_mirror` with no
+`direct` block — so an init wanting a provider the image does not carry fails
+saying so rather than reaching the network. A plan an operator approves is built
+from providers that were reviewed, and a build does not depend on a public
+registry being up. Every template gained a committed lock file.
+
+*The init result was discarded.* The runner ran `init` and never checked it, so
+the failure surfaced as the plan's complaint about the lock file — sending the
+operator to look at a lock file when the registry had refused them. Init is
+checked now and reports its own stderr, which is where Terraform says what
+happened.
+
+A test asserts every template locks every provider it and its staged modules
+require. Confirmed to fail with `hashicorp/time` removed from a lock file, which
+is exactly the mistake that leaves the mirror incomplete.
+
+### F-091 · P1 · An agent's runtime coordinates came from the caller — FIXED
+**Did:** Went to give the new agent a runtime from the console.
+**Saw:** `exigence-agent` requires `client_name_prefix`, `client_database_id` and `client_payload_bucket` — and the console has never seen the template that derived them.
+
+Two problems in one. A caller who could name them could point an agent at
+another client's database and bucket; and nothing but a person typing them knew
+what they were, so the console could not build an agent at all.
+
+The build that creates those resources now outputs them, the runner records them
+on the project beside the runtime's address and identity, and the Platform API
+resolves them for the agent template the way it already resolves the host project
+and the client's receiver. A request that states one is refused as not the
+caller's rather than overridden. A client whose runtime recorded none of it is
+refused with what to do: build the service again.
+
+Re-deriving the name in the Platform API was the tempting shortcut and the wrong
+one — the naming rule lives in the template that applied it, and two derivations
+of one name is how an agent silently detaches from the client it belongs to.
+
+### F-093 · P1 · An agent could not have a two-word name — FIXED
+**Did:** Filled the New agent form in with "Bookings Desk" and pressed the button.
+**Saw:** `400 invalidArgument: The request body does not match the required contract.`
+
+The console slugs the typed name into the artifact id, so it produced
+`exigence.superharness.bookings-desk`. `agent_slug` has allowed hyphens since it
+existed; `agent_id` never did — not in the runtime, not in the proxy contract,
+not in the Terraform variable. The console's own form could not create an agent
+with a two-word name.
+
+Allowed rather than avoided: a dot would read as a deeper namespace than it is,
+and no separator gives an id nobody can read. Every identifier validator
+downstream already permits hyphens.
+
+**Every unit test on this path used a single-word name.** This is the fourth
+defect on this page found by using it rather than by reading it.
