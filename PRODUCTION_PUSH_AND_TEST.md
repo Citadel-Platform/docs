@@ -3323,7 +3323,7 @@ about what to do next, and when it had spent its eight decisions the run ended
 with a plain explanation instead of stranding — F-085 working exactly as
 written.
 
-### F-100 · P2 · A run that ends at its ceiling does not say what was failing — OPEN
+### F-100 · P2 · A run that ends at its ceiling does not say what was failing — CAUSE FIXED
 **Did:** Read the failed `front-desk` run as an operator would.
 **Saw:**
 
@@ -3347,6 +3347,31 @@ step failed on the step, and have the ceiling message name the last refusal
 when there is one. That is a change to `Step`, to `commitStep`, and to
 `beginStep`'s message.
 
-Worth doing before a client ever reads one of these. Not done here because it
-wants a considered shape rather than a quick field, and because the session had
-already found nine other things.
+**The cause is fixed; the reporting half is not.**
+
+Reading the code turned up something better than a reporting patch. The type
+already said what should happen:
+
+```ts
+/** The provider refused, and definitely did not deliver. Retrying changes nothing. */
+export class ChannelRefusedError extends Error {
+```
+
+Nothing acted on it. The error was thrown, so the graph node threw, the step
+was retried and then marked failed with no reason recorded, and the agent spent
+its ceiling re-deciding against an error it never saw — because a thrown error
+never reaches the transcript. A *denied* tool result does; the superharness has
+handled those gracefully since it was written.
+
+So a channel refusal now comes back in the envelope a policy denial already
+uses. The agent reads why and can choose something else, the audit says the
+same words, and nothing retries a message that was never going to be sent.
+`ChannelUnavailableError` still throws: it means "try later", and a retry is
+exactly right for it. Both halves are tested, and the refusal test was
+confirmed to fail against the previous behaviour.
+
+**Still open:** a step records no reason for failing, and the ceiling message
+still names only the ceiling. That is a change to `Step`, `commitStep` and
+`beginStep`, and it wants a considered shape rather than a quick field. It
+matters less now that the agent can see refusals and act on them, but an
+operator reading a failed run still cannot see why its steps failed.
