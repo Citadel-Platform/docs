@@ -3370,6 +3370,17 @@ same words, and nothing retries a message that was never going to be sent.
 exactly right for it. Both halves are tested, and the refusal test was
 confirmed to fail against the previous behaviour.
 
+**Verified live**, against the same blocked channel:
+
+| | before | after |
+| --- | --- | --- |
+| activities | 16 | 3 |
+| `step-1.act` | failed | succeeded, carrying the refusal |
+| run | failed at its ceiling | succeeded |
+| duration | ~5 minutes | ~20 seconds |
+
+The agent read the refusal, understood there was nothing to do, and stopped.
+
 **Still open:** a step records no reason for failing, and the ceiling message
 still names only the ceiling. That is a change to `Step`, `commitStep` and
 `beginStep`, and it wants a considered shape rather than a quick field. It
@@ -3414,3 +3425,8 @@ outputs the runner reads. Confirmed to fail with one removed.
 *job* is marked failed, and only an operator who went looking at the job would
 know. `refunds-desk` and the agents before it are in the same state: deployed,
 working, and recorded as failures.
+
+**Verified live.** With the fix in the provisioner image, `front-desk`'s
+runtime was re-applied from the console and the job reported `applied` — the
+same build that had reported `applyFailed` an hour earlier against the same
+service.
