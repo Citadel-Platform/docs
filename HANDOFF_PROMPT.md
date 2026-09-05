@@ -59,8 +59,9 @@ a fixable failure into a misleading one.
 
 ## Still untested
 
-- **The new agent has never run.** Its runtime is up and registered; nothing
-  has been started on it.
+- **Terraform drift.** Four of the client's Cloud Run services were rolled with
+  `gcloud` to get F-097 onto a live-broken path quickly. Re-apply them from the
+  console.
 - Two agents answering their own channels. This needs a second WhatsApp
   number; the one test number is bound to `exigence.superharness`.
 - A multi-turn conversation, an image, two customers overlapping.
@@ -112,6 +113,12 @@ carry their reasons rather than leaking stack traces.
 - **F-091** an agent's runtime coordinates are resolved from what the client's
   build recorded, not taken from the caller.
 - **F-093** an agent may have a two-word name.
+- **F-094** an agent can be sent back to its runtime build.
+- **F-096** an agent is started on the runtime that serves it. No agent had
+  ever been startable from the console.
+- **F-097** every activity transition is the record with a new status. A P0
+  regression from F-080 that broke every step of every run on every configured
+  deployment. Verified live: `4 → 27 → succeeded at 41`.
 - **F-095** a client's second agent no longer destroys their first. Verified
   live: `23 to add / 23 to destroy` became `32 to add / 0 to destroy`, applied,
   and both runtimes now stand.
