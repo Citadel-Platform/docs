@@ -36,6 +36,43 @@ names are bounded and the prefix already spends most of the budget. Two agents
 whose slugs share their first thirteen characters will collide. Nothing checks
 this yet — see the open item below.
 
+## Derived once, then it is a fact
+
+Everything above describes how a slug is **first** arrived at. For an agent
+that already exists it is no longer a derivation — it is a record of what was
+built, and re-deriving it is a defect.
+
+`exigence.superharness` on `user-test-1` is the case that proves it. Its slug
+is `wa2`; the derivation gives `superharness`. Rolling it forward from the
+console derived the wrong one, read an empty Terraform state, and offered
+`32 to add, 0 to change, 0 to destroy` — a second complete runtime beside the
+one already serving that client's line, under different names so nothing would
+even have collided. That is F-108, and it is F-095 from the other side: not
+two agents sharing one state, but one agent pointed at a state that is not its
+own. Both end as a plan proposing to create what already exists, which nobody
+reading a summary would recognise as wrong.
+
+So the platform reads the slug back from the build that recorded it, exactly
+as it reads back the client runtime's name prefix, database and bucket (F-091),
+and for the same reason: the naming happened once, and deriving it again is how
+a deployment detaches from what it named. A caller's slug stands only for an
+agent no applied build has ever named.
+
+Two details, both learned the hard way:
+
+- **An apply that ran named things, even if the job did not finish `applied`.**
+  Every one of `exigence.superharness`'s thirteen builds is recorded
+  `applyFailed`: Terraform created the resources and the post-apply routing
+  check then failed the job. The state, the prefix and the running service are
+  all real. Approval is the honest signal that an apply was launched at all —
+  a job that never got past planning created nothing and named nothing.
+- **The apply must run under the plan's slug**, not a freshly derived one.
+  `approveAndApply` re-resolves everything else on purpose, so that a boundary
+  revision published between the plan and the apply is the one the artifact is
+  bound by. The slug is the exception: the plan file is written under the
+  prefix the plan used, so an apply that composed a different slug could not
+  find the plan at all.
+
 ## Terraform state is per agent
 
 `provisioner/exigence-agent/<project>/<slug>`.

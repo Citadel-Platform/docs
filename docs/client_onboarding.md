@@ -223,6 +223,27 @@ either produces a confusing failure:
 
 ## Things that will bite you
 
+**A genuinely new project has none of the Google Cloud services on.** Every
+provisioning template now enables the services its own resources need, and
+that was not true until 05/09/26 — `client-data-plane` created every one of a
+client's Firestore databases and had never enabled the Firestore API. It
+applied sixteen times without failing because every one of those projects
+already had Firestore from an Exigence build. The defect was invisible to
+every existing client and fatal to the first genuinely new one.
+
+The shape is worth remembering rather than the specific fix: **anything only a
+brand-new project exercises has, by definition, never been exercised.** That
+is the whole of what makes this path worth walking end to end rather than
+reasoning about. If an apply dies partway with "API has not been used in
+project … before or it is disabled", the template is missing an enablement —
+add it there, not by hand in the console, so the next client gets the fix.
+
+The provisioner also needs the roles to build with. `compute.admin` and
+`iam.roleAdmin` were added on 05/09/26 for the Devstation; a role missing from
+that list is not a refusal anybody sees at bootstrap time, it surfaces as an
+apply that creates most of a client's infrastructure and then stops, after the
+operator has already approved it.
+
 **`handled` is not triage state.** It records whether the application caught
 the error. A case is New until an operator says otherwise. Never infer status
 from it — the Console did exactly that once and hid twelve live invoicing
