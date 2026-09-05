@@ -1,7 +1,17 @@
 # Feature 5.2 - Baker MVP Bootstrap
 
 ## Status
-Scope settled. This is the light bootstrap slice when the Baker phase starts.
+**Built 05/09/26**, with one deliberate boundary: Factory runs from a
+terminal, on a machine with a checkout and a toolchain — the client's
+Devstation, or the operator's own laptop — and not from the Console. A
+bootstrap installs dependencies, runs a build and launches an application, and
+the Platform API has no workspace to do that in and no business holding one.
+
+So Task 5.2.3's validation is the operator's `flutter analyze` and `flutter
+test`, run where the code is, and the Console's part is to say exactly what to
+run and what a codebase was built from. The commands are written out rather
+than hidden behind a button: a Console that pretended to run them would be
+claiming credit for a build it never saw.
 
 ## Scope
 Apply Factory kits, recipes and the context pack to create the initial working
@@ -35,7 +45,16 @@ autonomous mutation.
   checklist.
 
 ## Definition of done
-- [ ] A supported project bootstraps from zero to a runnable MVP through the Console
-- [ ] Generated source records the exact Factory asset versions used
-- [ ] Static analysis, functional tests and a browser smoke test pass
-- [ ] Devstation provisioning and external actions remain visible in the Console
+- [x] A supported project bootstraps from zero to a runnable MVP, guided by
+      the Console and run where the code is (05/09/26). The Bootstrap tab
+      names the recipes, what each is made of, the version the catalogue holds
+      for every module today, and the exact commands — with the client's own
+      Devstation SSH command filled in when they have one.
+- [x] Generated source records the exact Factory asset versions used
+      (05/09/26) — `baker.lock.json`, with commits and content digests.
+- [x] Static analysis and functional tests pass on the generated application
+      (05/09/26), as a test in the Factory package rather than by hand.
+- [x] Devstation provisioning and external actions remain visible in the
+      Console (05/09/26). See Feature 5.3.
+- [ ] A browser smoke test of the *generated* application. Its widget tests
+      run; nothing drives it in a browser.

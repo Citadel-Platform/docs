@@ -1,7 +1,15 @@
 # Feature 5.1 - Baker Factory
 
 ## Status
-Scope settled. Implementation starts when the Baker phase is resumed.
+**Built 05/09/26.** `citadel_core/baker/` is the Factory package and its CLI;
+the six modules in `Citadel-Platform/baker-modules` carry real source rather
+than a `module.json` and a README each; the two recipes are indexed into the
+catalogue and shown in the Console.
+
+Verified by doing it: `crm-mvp` into an empty directory produces an
+application that `flutter pub get`, `flutter analyze` and `flutter test` all
+pass on, and that run is a test in the package rather than something somebody
+remembers to try.
 
 ## Scope
 Factory is a light, superdev-only developer accelerator for taking a CRM,
@@ -38,8 +46,21 @@ or upgrade engine.
   script.
 
 ## Definition of done
-- [ ] A clean repository reaches a working MVP shell using approved kits and recipes
-- [ ] The context pack lets an operator-directed coding agent use the assets correctly
-- [ ] Used asset versions are recorded in the codebase
-- [ ] Non-superdev identities cannot discover or invoke Factory
-- [ ] Bootstrap is covered by a clean-repository functional test
+- [x] A clean repository reaches a working MVP shell using approved kits and
+      recipes (05/09/26). 13 files, analysing and passing.
+- [x] Used asset versions are recorded in the codebase (05/09/26).
+      `baker.lock.json` records the recipe, and per module the version, the
+      commit it was cut at and a digest of what was actually written — the
+      digest because a module can be edited between a checkout and a
+      bootstrap, and a version number is what somebody typed.
+- [x] Bootstrap is covered by a clean-repository functional test (05/09/26).
+      It runs by default: a recipe that no longer builds is invisible to every
+      other check in the package, and a test that has to be remembered stops
+      being run.
+- [x] Non-superdev identities cannot discover or invoke Factory. The Console
+      surface sits behind the superdev-only Baker permissions, and the CLI is
+      a repository checkout rather than a service anybody can reach.
+- [ ] The context pack lets an operator-directed coding agent use the assets
+      correctly. Task 5.1.3 is the one part not built: there is no
+      source-controlled context pack yet, and the modules' own READMEs are
+      what a coding agent currently has.
