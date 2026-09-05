@@ -3063,3 +3063,47 @@ over time is most of them.
 
 **Found by hitting it**, which is now the fifth time today that using a page
 found something reading it did not.
+
+
+### F-095 · P0 · A client's agents shared one Terraform state — FIXED
+**Did:** Created `returns-desk` from the console for a client that already had
+an agent, and let its runtime step plan.
+**Saw:** `Plan: 23 to add, 0 to change, 23 to destroy.`
+
+The 23 to destroy were the Cloud Run service, queue, service accounts and
+channel secret grants of `cit-user-tes-f111-*` — the agent answering that
+client's live WhatsApp line. Building a client's second agent proposed tearing
+down their first.
+
+The runner computed one state prefix per template per project:
+
+```dart
+// Every supported template has one deployment for each project.
+final String prefix = 'provisioner/$template/$projectId';
+```
+
+The comment says the assumption out loud, and it was true of every template
+until a client could have more than one agent. `exigence-agent` deploys *an
+agent*, not a project's Exigence. Two agents planned against one state is
+Terraform being told "this is what the project should contain", and it does the
+only thing it can with that.
+
+**Fixed:** an agent's state prefix carries its slug —
+`provisioner/exigence-agent/<project>/<slug>` — the same slug that already
+distinguishes its Cloud Run service, queue and service accounts from every
+other agent's. A build with no slug is refused rather than defaulted: falling
+back to the shared prefix is exactly this failure, done silently.
+
+**Migration:** the one existing client-with-an-agent had its state copied from
+the shared prefix to `…/user-test-1/wa2/` (slug confirmed against the resource
+names: `md5("user-test-1/wa2")[0:4]` is `f111`). The legacy object is left in
+place rather than deleted; it can go once a build has run against the new
+prefix.
+
+**The plan was never applied.** It was found by reading the plan the console
+had produced and was about to offer for approval.
+
+**Note on the cost disclosure, which was right.** The console would have shown
+"Apply 23 changes" with each marked as a replace — the summary parser handles
+replaces and counts them in both columns for exactly this reason. Nothing was
+hidden from the operator. What was wrong was the plan, not the reporting of it.
