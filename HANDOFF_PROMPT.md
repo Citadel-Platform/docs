@@ -65,6 +65,10 @@ F-096 · an agent is started on the runtime that serves it
 F-097 · every activity transition is the record with a new status
 F-098 · two agents whose resources would collide are refused
 F-099 · disabling an agent no longer crash-loops its runtime
+F-100 · a provider's refusal is an answer the agent can read, not a thrown
+error nothing records
+F-101 · an agent's deterministic address is recognised, so a build that
+deployed correctly is no longer reported as failed
 
 Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 
@@ -95,18 +99,26 @@ nothing at all.
 
 ## Next, in order
 
-1. **Reconcile the Terraform drift.** Five of the client's Cloud Run services
-   were rolled with `gcloud run services update` during F-097 and F-099, to get
-   a live-broken path fixed quickly. Re-apply `exigence-runtime` and the three
-   agent runtimes from the Console. The template default is already pinned to
-   the right image, so this is safe.
-2. **F-100.** The recommended shape is written down: record why a step failed
-   on the step, and have the ceiling message name the last refusal. It is a
-   change to `Step`, `commitStep` and `beginStep`, and it wants a considered
-   shape rather than a quick field.
-3. **Once the WhatsApp token is fixed:** the inbound half of the two-agent
-   test, multi-turn, media, two customers overlapping.
+1. **Once the WhatsApp token is fixed:** the inbound half of the two-agent
+   test, multi-turn, media, two customers overlapping. `front-desk` is already
+   the only enabled agent bound to the channel, so an inbound message should
+   reach it — that is the test, and it needs one message from your phone.
+2. **F-100's remaining half.** A step records no reason for failing, and the
+   ceiling message names only the ceiling. The cause is fixed — refusals now
+   reach the agent — but an operator reading a failed run still cannot see why
+   its steps failed. It is a change to `Step`, `commitStep` and `beginStep`,
+   and it wants a considered shape rather than a quick field.
+3. **Bring the last two agent runtimes forward.** `5bc3` and `f111` are on the
+   previous image. Re-applying them from their runtime pages is enough; the
+   template default is the newest image, so drift only ever moves forward now.
 4. **Then** the fresh-project onboarding — PROMPT.md item 4, deliberately held.
+
+## Terraform drift: reconciled
+
+Five services had been rolled with `gcloud` during the F-097 and F-099 fixes.
+They were re-applied from the Console, so Terraform owns the images again, and
+the template default is pinned to the newest build — which means any future
+apply moves forward and never rolls a fix back. That trap is closed.
 
 ## Things that will bite
 
@@ -126,5 +138,5 @@ nothing at all.
 
 ## Gates
 
-989 Exigence · 565 Platform API · 34 provisioner · 510 Console. All green, all
+994 Exigence · 565 Platform API · 37 provisioner · 510 Console. All green, all
 repos clean and pushed.
