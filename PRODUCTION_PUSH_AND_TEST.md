@@ -3101,7 +3101,18 @@ place rather than deleted; it can go once a build has run against the new
 prefix.
 
 **The plan was never applied.** It was found by reading the plan the console
-had produced and was about to offer for approval.
+had produced and was about to offer for approval, and the job was marked
+superseded so it could not be applied later by mistake.
+
+**Verified live.** With the fix deployed, a third agent for the same client
+planned `32 to add, 0 to change, 0 to destroy` — every action a create, against
+its own state at `…/user-test-1/refunds-desk/`. The two numbers side by side
+are the whole of it:
+
+```
+before   Plan: 23 to add, 0 to change, 23 to destroy
+after    Plan: 32 to add, 0 to change,  0 to destroy
+```
 
 **Note on the cost disclosure, which was right.** The console would have shown
 "Apply 23 changes" with each marked as a replace — the summary parser handles
