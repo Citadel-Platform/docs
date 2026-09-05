@@ -3259,3 +3259,33 @@ saying what to do about it.
 places — the console's derivation, the template's validator and the resource
 naming — and none of them had ever been stated together. Writing them on one
 page made the gap between them obvious.
+
+
+### F-099 · P1 · Disabling an agent crash-looped its runtime — FIXED
+**Did:** Disabled `exigence.superharness` from the Artifacts page, so that
+exactly one agent would answer the `whatsapp` channel.
+**Saw:** Its Cloud Run service stopped starting.
+
+```
+Citadel Exigence runtime failed to start { message: 'artifact is disabled' }
+Container called exit(1).
+```
+
+`min_instances = 1` restarted it, and it failed again, and so on. What the
+operator got for pressing a button the console offers on the row was a
+crash-looping service in their own project, still billed, with nothing anywhere
+saying why — not on the artifact, not on the inventory, nowhere.
+
+**A disabled artifact is a state, not a fault.** The runtime now serves
+dormant: `/healthz` answers so the host stops restarting it, every other
+request answers 503 with the reason and what to do about it, and it re-attempts
+the bootstrap on an interval. When the artifact is enabled again it exits
+cleanly and the host starts it properly, so re-enabling needs no redeploy and
+nobody has to know that it otherwise would.
+
+Told apart from every other startup failure by the resolver's own message.
+Every other reason a configuration will not load is a fault to report loudly;
+this one is somebody having pressed Disable.
+
+**Verified live**: `cit-user-tes-f111-runtime` reports Ready, and its log says
+`Citadel Exigence runtime is dormant: its artifact is disabled.`
