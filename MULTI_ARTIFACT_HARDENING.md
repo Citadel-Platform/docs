@@ -167,3 +167,28 @@ seed data, where showing an offering as off is honest. Checked, left alone.
   by the drift check.
 * **F-079** — the Console's settings save could silently drop an offering, and
   nothing but a reviewer's attention stopped it.
+
+
+---
+
+# Postscript, 05/09/26 — the case this file was written for has still not run
+
+Everything above was built because "per project" assumptions break once a
+project has several artifacts. Fixing them was right and they are fixed.
+
+**But a project has never had several artifacts.** `exigence-agent` has run 13
+times, all for `user-test-1`, all for the same single agent. Trying to publish
+a second one found two things this file could not have:
+
+* **F-086** — the agent's artifact id was a *constant*, so a second publish
+  produced the same `exigence.superharness` and would have overwritten the
+  first agent's history. Fixed.
+* **F-087** — with that fixed, publishing a second agent conflicts on the
+  shared provider, pricing and adapter versions, whose content embeds
+  `publishedAt` at coordinates that are supposed to identify content. Open, and
+  the next piece of work.
+
+The lesson is the one this file already argues in three other places and did
+not apply to itself: a path nobody has walked is a path nobody has checked. The
+hardening was done from an audit, and the audit could not see either of these —
+only trying to publish the second agent could.
