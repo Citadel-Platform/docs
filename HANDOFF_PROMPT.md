@@ -18,20 +18,20 @@ agent, runs it, and the agent replies unattended. Consent is enforced against
 the ledger. Routing follows the artifact because every Exigence queue rewrites
 the host.
 
-## The one thing in flight
+## What is finished, and what it took
 
-An agent's runtime is built from coordinates the *client's* build records —
-its name prefix, database and payload bucket (F-091). The provisioner image
-that records them was deployed at 03:26; the client's last build ran before
-it. So the New agent page's runtime step currently refuses with:
+An agent created from the console now gets a runtime from the same page, and
+that runtime stands beside the client's existing agents rather than on top of
+them:
 
-> This project records no Exigence runtime for an agent to be built beside.
-> Build the service first, or build it again if it was built before Citadel
-> recorded what an agent needs.
+```
+cit-user-tes-f111-runtime   exigence.superharness               (untouched)
+cit-user-tes-5bc3-runtime   exigence.superharness.refunds-desk  (new, Ready)
+```
 
-That refusal is correct and says what to do. **Run the Exigence build once
-more from the console, then build `bookings-desk`'s runtime from the New agent
-page.** That is the next thing, and it is one build away.
+Getting there needed F-091 (the coordinates an agent's runtime is built from
+are recorded by the client's build, not typed by a caller) and F-095, which is
+the one to read about below.
 
 ## What today's defects have in common
 
@@ -41,7 +41,15 @@ one is the clearest: every unit test on the agent path used a single-word
 name, so nothing caught that `agent_id` refused the hyphen the console's own
 slug produces. The form could not create an agent called "Bookings Desk".
 
-F-090 is the one worth reading twice. Every client build downloaded its
+**F-095 is the one to read first.** Building a client's second agent planned
+`23 to add, 0 to change, 23 to destroy` — the 23 being the whole of the agent
+answering that client's live WhatsApp line. The runner kept one Terraform state
+per template per project and said so in a comment that was true of every
+template until, that same morning, a client could have more than one agent. An
+agent's state now carries its slug. Found by reading a plan the console had
+produced and was about to offer for approval; never applied.
+
+F-090 is the other one worth reading twice. Every client build downloaded its
 providers from registry.terraform.io, from a fresh container with no cache.
 The registry rate-limited it. What the operator was shown was not the 429 — it
 was the empty lock file the failed download left behind, because the runner
@@ -51,10 +59,11 @@ a fixable failure into a misleading one.
 
 ## Still untested
 
+- **The new agent has never run.** Its runtime is up and registered; nothing
+  has been started on it.
 - Two agents answering their own channels. This needs a second WhatsApp
   number; the one test number is bound to `exigence.superharness`.
 - A multi-turn conversation, an image, two customers overlapping.
-- An agent runtime built from the console (blocked only by the build above).
 
 ## Before the empty GCP project
 
@@ -103,6 +112,9 @@ carry their reasons rather than leaking stack traces.
 - **F-091** an agent's runtime coordinates are resolved from what the client's
   build recorded, not taken from the caller.
 - **F-093** an agent may have a two-word name.
+- **F-095** a client's second agent no longer destroys their first. Verified
+  live: `23 to add / 23 to destroy` became `32 to add / 0 to destroy`, applied,
+  and both runtimes now stand.
 
 Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 
@@ -116,11 +128,15 @@ Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 | `exigence.superharness` | 2 | Superharness | manual, conversation (`whatsapp`) |
 | `exigence.superharness.deliveries` | 1 | Superharness | manual |
 | `exigence.superharness.bookings-desk` | 1 | Bookings Desk | manual |
+| `exigence.superharness.returns-desk` | 1 | Returns Desk | manual |
+| `exigence.superharness.refunds-desk` | 1 | Refunds Desk | manual |
 
 `deliveries` was published from the command line to prove F-087 and carries the
-old shared display name; `bookings-desk` was created from the console. Two
-Cloud Run runtimes exist — the client's own and `exigence.superharness`'s.
-Neither of the two newer agents has one yet.
+old shared display name; the other three were created from the console. Three
+Cloud Run runtimes exist: the client's own (`acb1`), `exigence.superharness`'s
+(`f111`) and `refunds-desk`'s (`5bc3`). `deliveries`, `bookings-desk` and
+`returns-desk` have none — see F-094, which is why they cannot be given one
+from the console yet.
 
-**Suites:** 986 Exigence · 557 Platform API · 30 provisioner · 507 Console.
+**Suites:** 986 Exigence · 557 Platform API · 34 provisioner · 507 Console.
 All repos clean and synced. The root state files are not in any git repo.
