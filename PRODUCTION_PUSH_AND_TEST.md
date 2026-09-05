@@ -3145,3 +3145,66 @@ had one.
 "Apply 23 changes" with each marked as a replace — the summary parser handles
 replaces and counts them in both columns for exactly this reason. Nothing was
 hidden from the operator. What was wrong was the plan, not the reporting of it.
+
+
+### F-096 · P1 · An agent could not be started from the console — FIXED
+**Did:** Pressed "Run manually" on a newly created agent.
+**Saw:** `404`, and a console message that said only "Run could not be started."
+
+The platform resolves one Exigence runtime per project and sends every call
+there, so a run started for an *agent's* artifact reached the client's runtime
+— which serves one artifact and refuses the rest, exactly as designed. No agent
+had ever been startable from the console. The runs the agents had were all
+channel deliveries, which follow the artifact because the queue does.
+
+Starting a run is the operation that must reach the artifact's own runtime: the
+runtime creates the run and enqueues its first step on its own queue, so a run
+created anywhere else is served by the wrong service or by nothing. Reading a
+revision or listing runs reads the shared registry and any of the project's
+runtimes can answer, so those are left alone.
+
+`resolveForArtifact` reads the per-artifact runtimes the provisioning runner
+already records, and falls back to the project's runtime twice over — when a
+deployment has no artifact reader, and when an artifact has no runtime of its
+own. The second is not a gap: it is the ordinary state of every artifact the
+project's own runtime serves.
+
+**This is F-072's lesson in the control plane.** Deliveries follow the
+artifact; so must the calls that start them.
+
+### F-097 · P0 · Every step of every run conflicted with itself — FIXED, VERIFICATION PENDING
+**Did:** Started the first agent run after F-096.
+**Saw:** `activity identity cannot change`, retried until the ceiling. Nothing
+on the run but a step stuck at `pending`.
+
+An activity's identity is everything about it but its status, and the journal
+refuses a transition that changes any of it. F-080's `abandonedAfter` was
+written where the attempt started and nowhere else — so adding it at
+`activity.started` changed the identity of an activity created without it, and
+`activity.succeeded` then dropped it and changed the identity again. Two
+conflicts per attempt, either fatal.
+
+The bound is part of the activity from creation now, and later transitions
+carry what the journal holds rather than recomputing it: a later clock gives a
+later instant, which is a different identity again.
+
+**Three things let this reach production.**
+
+1. **No test anywhere set `stepDeadlineMillis`.** The field exists only where
+   Terraform states one, so 977 tests ran on the single configuration where the
+   bug is invisible.
+2. **The in-memory journal did not enforce the identity rule the real one
+   does** — which a comment in `graph_projection_recorder.ts` already warned
+   about, in those words. The fake enforces it now, and immediately found the
+   second conflict that had not yet been noticed.
+3. **The error did not say what changed.** "activity identity cannot change" is
+   true and useless; finding the field took a deployment and a lot of guessing.
+   It now names the field and what it became.
+
+It affected every deployment carrying the F-080 image, the live WhatsApp agent
+among them. All of `user-test-1`'s runtimes were rolled to the fixed image.
+
+**Not yet verified live:** Cloud Tasks had backed off, so no retry had reached
+the fixed revision at the time of writing. The two stranded runs will not
+recover — an activity created without a bound can never be transitioned by code
+that adds one — and are expected to end at their ceiling.
