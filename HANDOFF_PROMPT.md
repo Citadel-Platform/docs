@@ -1,149 +1,130 @@
-# Handoff — 05/09/26, late
+# Handoff — 05/09/26, evening
 
-**A client can have as many agents as they want, and the console is how they
-get one.** That sentence is the whole of what changed today. The previous
-handoff opened by saying a client could have exactly one; F-087 was why, and it
-is fixed and proven live.
+**An agent's whole life is a Console action now.** Create it, give it a
+runtime, start it, switch it off. That sentence is what changed today, and
+every defect below was found on the way to being able to say it.
+
+## One thing needs you, and nothing else can move without it
+
+**Meta has blocked the WhatsApp channel.**
+
+```
+ChannelRefusedError: whatsapp refused the message:
+Meta refused the message: API access blocked. (code 200)
+```
+
+The same channel sent successfully on 04/09 at 19:01. Code 200 is a permission
+or capability problem, and the likeliest cause is that the access token in
+Secret Manager was a temporary one — those last 24 hours, and 04/09 19:01 is
+about that long before this started failing.
+
+**Issue a permanent WhatsApp access token and update the channel secret**, or
+confirm the Business account is not restricted. Nothing in Citadel can resolve
+it.
+
+It blocks everything that needs a real message to move: the inbound half of two
+agents on their own lines, multi-turn conversation, media, and two customers
+overlapping. Everything up to Meta is proven — the agent decided to send, the
+runtime called the API with the client's own credentials, and the refusal came
+back with its reason intact.
 
 ## What is true now
 
-`user-test-1` holds three superharness artifacts. One of them,
-`exigence.superharness.bookings-desk`, was created end to end from the console
-by a signed-in operator: named, instructed, given a ceiling and a reply policy,
-and published. Its Palisade authority came from the deployment, never from the
-browser.
+`user-test-1` holds seven artifacts, four agent runtimes and a receiver.
 
-Everything of 04/09 still holds: a customer's WhatsApp message reaches an
-agent, runs it, and the agent replies unattended. Consent is enforced against
-the ledger. Routing follows the artifact because every Exigence queue rewrites
-the host.
+| artifact | rev | name | state |
+| --- | --- | --- | --- |
+| `exigence.reference.summary` | 1 | Reference summary | job, on the client runtime |
+| `exigence.superharness` | 3 | Superharness | **disabled**; its runtime is dormant by design |
+| `exigence.superharness.deliveries` | 1 | Superharness | no runtime |
+| `exigence.superharness.bookings-desk` | 1 | Bookings Desk | runtime building |
+| `exigence.superharness.returns-desk` | 1 | Returns Desk | no runtime |
+| `exigence.superharness.refunds-desk` | 1 | Refunds Desk | `5bc3`, has run and succeeded |
+| `exigence.superharness.front-desk` | 1 | Front Desk | `37bd`, answers `whatsapp`, sends itself |
 
-## What is finished, and what it took
+`front-desk` is the only enabled agent bound to the channel, which is what the
+router requires — two enabled agents on one channel is refused rather than
+resolved by ordering.
 
-An agent created from the console now gets a runtime from the same page, and
-that runtime stands beside the client's existing agents rather than on top of
-them:
+**A run started from the Console finished properly**: three decisions, two
+actions, then the agent stopped on its own, with per-step cost metered.
 
-```
-cit-user-tes-f111-runtime   exigence.superharness               (untouched)
-cit-user-tes-5bc3-runtime   exigence.superharness.refunds-desk  (new, Ready)
-```
+## Fixed today
 
-Getting there needed F-091 (the coordinates an agent's runtime is built from
-are recorded by the client's build, not typed by a caller) and F-095, which is
-the one to read about below.
-
-## What today's defects have in common
-
-Five were found and fixed: F-088, F-089, F-090, F-091, F-093. Four of them
-were found by *using the page*, not by reading the code or the tests. The last
-one is the clearest: every unit test on the agent path used a single-word
-name, so nothing caught that `agent_id` refused the hyphen the console's own
-slug produces. The form could not create an agent called "Bookings Desk".
-
-**F-095 is the one to read first.** Building a client's second agent planned
-`23 to add, 0 to change, 23 to destroy` — the 23 being the whole of the agent
-answering that client's live WhatsApp line. The runner kept one Terraform state
-per template per project and said so in a comment that was true of every
-template until, that same morning, a client could have more than one agent. An
-agent's state now carries its slug. Found by reading a plan the console had
-produced and was about to offer for approval; never applied.
-
-F-090 is the other one worth reading twice. Every client build downloaded its
-providers from registry.terraform.io, from a fresh container with no cache.
-The registry rate-limited it. What the operator was shown was not the 429 — it
-was the empty lock file the failed download left behind, because the runner
-ran `init` and never checked it. Providers are mirrored into the image now and
-`init` is checked; but the general lesson is that a swallowed exit code turns
-a fixable failure into a misleading one.
-
-## Still untested
-
-- **Terraform drift.** Four of the client's Cloud Run services were rolled with
-  `gcloud` to get F-097 onto a live-broken path quickly. Re-apply them from the
-  console.
-- Two agents answering their own channels. This needs a second WhatsApp
-  number; the one test number is bound to `exigence.superharness`.
-- A multi-turn conversation, an image, two customers overlapping.
-
-## Before the empty GCP project
-
-Do the list in `CURRENT_TASK.md` in order. Onboarding a fresh project before
-two agents have been seen answering means debugging two unknowns at once.
-
-## Things that will bite
-
-- Cloud Tasks reserves a deleted queue's name for about seven days, and the
-  name comes from the client id. `test-sandbox` stays blocked until ~09/09/26.
-- `min_instances = 1` is a correctness requirement (F-027), not a knob. It is
-  also one always-on instance per artifact per client. Answer the cost
-  question before the tenth agent.
-- Cancelling a run does not purge queued deliveries.
-- The root state files are not in any git repo. The repository root is not a
-  repository.
-
-
-## What works, proven live on `user-test-1`
-
-A customer's WhatsApp message reaches an agent, runs it, and the agent replies
-unattended. Verified 04/09 at 19:01: `channel.send` **ok**, run **succeeded**
-at sequence 28, `manifold_conversations` carries the exchange.
-
-```
-Meta → receiver          verifies the signature, finds which agent answers
-     → the AGENT's queue routing is the queue, never the task's URL (F-072)
-     → agent runtime     its own service, identity, queue and secrets
-     → run               authorised because the registry knows the agent (F-076)
-     → channel.send      held or automatic, as published (F-077)
-```
-
-Consent is enforced for real: a "STOP" from the test number blocked every reply
-until "start" opted back in. Approval gating works in both directions. Refusals
-carry their reasons rather than leaking stack traces.
-
-## Fixed since the last handoff
-
-- **F-087** a second agent publishes against the shared versions already
-  stored. Proven live: all four reported as adopted.
-- **F-088** adding an agent is a console page. `POST …/exigence/agents`, gated
-  on `exigence.agents.publish`.
-- **F-089** an agent is called what it was named.
-- **F-090** a client build no longer reaches the public provider registry, and
-  a failed `init` is reported rather than swallowed.
-- **F-091** an agent's runtime coordinates are resolved from what the client's
-  build recorded, not taken from the caller.
-- **F-093** an agent may have a two-word name.
-- **F-094** an agent can be sent back to its runtime build.
-- **F-096** an agent is started on the runtime that serves it. No agent had
-  ever been startable from the console.
-- **F-097** every activity transition is the record with a new status. A P0
-  regression from F-080 that broke every step of every run on every configured
-  deployment. Verified live: `4 → 27 → succeeded at 41`.
-- **F-095** a client's second agent no longer destroys their first. Verified
-  live: `23 to add / 23 to destroy` became `32 to add / 0 to destroy`, applied,
-  and both runtimes now stand.
+F-087 · a second agent publishes against the shared versions already stored
+F-088 · adding an agent is a Console page, not a command-line tool
+F-089 · an agent is called what it was named
+F-090 · builds no longer reach the public provider registry, and a failed
+`init` is reported instead of swallowed
+F-091 · an agent's runtime coordinates come from what the client's build
+recorded, never from the caller
+F-093 · an agent may have a two-word name
+F-094 · an agent can be sent back to its runtime build
+F-095 · a client's second agent no longer destroys their first
+F-096 · an agent is started on the runtime that serves it
+F-097 · every activity transition is the record with a new status
+F-098 · two agents whose resources would collide are refused
+F-099 · disabling an agent no longer crash-loops its runtime
 
 Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 
-## State of the test client
+## The four worth reading
 
-`user-test-1`, on GCP `testproj-448205`, Exigence and Manifold on.
+All four were **silent** — they reported something true and unhelpful, or
+nothing at all.
 
-| artifact | rev | name | triggers |
-| --- | --- | --- | --- |
-| `exigence.reference.summary` | 1 | Reference summary | manual |
-| `exigence.superharness` | 2 | Superharness | manual, conversation (`whatsapp`) |
-| `exigence.superharness.deliveries` | 1 | Superharness | manual |
-| `exigence.superharness.bookings-desk` | 1 | Bookings Desk | manual |
-| `exigence.superharness.returns-desk` | 1 | Returns Desk | manual |
-| `exigence.superharness.refunds-desk` | 1 | Refunds Desk | manual |
+- **F-090.** Every client build downloaded its providers from
+  registry.terraform.io and got rate-limited. What the operator saw was not the
+  429 — it was the empty lock file the failed download left behind, because the
+  runner ran `init` and never checked its exit code.
+- **F-095.** Building a client's second agent planned `23 to add, 0 to change,
+  23 to destroy` — the whole of the agent answering their live line. The runner
+  kept one Terraform state per template per project and said so in a comment
+  that was true of every template until, that same morning, a client could have
+  more than one agent.
+- **F-097.** A P0 regression from F-080. An activity's identity is everything
+  about it but its status, and `abandonedAfter` was added to activities created
+  without it — so every step of every run on every configured deployment
+  conflicted with itself and retried to its ceiling. **977 tests missed it
+  because none of them set a step deadline**, and the in-memory journal did not
+  enforce the rule the real one does — which a comment in that very file had
+  already warned about.
+- **F-100 (open).** A run that ends at its ceiling says the agent spent its
+  decisions and never says every one of them was refused by Meta. F-090's
+  lesson in a third place.
 
-`deliveries` was published from the command line to prove F-087 and carries the
-old shared display name; the other three were created from the console. Three
-Cloud Run runtimes exist: the client's own (`acb1`), `exigence.superharness`'s
-(`f111`) and `refunds-desk`'s (`5bc3`). `deliveries`, `bookings-desk` and
-`returns-desk` have none — see F-094, which is why they cannot be given one
-from the console yet.
+## Next, in order
 
-**Suites:** 986 Exigence · 557 Platform API · 34 provisioner · 507 Console.
-All repos clean and synced. The root state files are not in any git repo.
+1. **Reconcile the Terraform drift.** Five of the client's Cloud Run services
+   were rolled with `gcloud run services update` during F-097 and F-099, to get
+   a live-broken path fixed quickly. Re-apply `exigence-runtime` and the three
+   agent runtimes from the Console. The template default is already pinned to
+   the right image, so this is safe.
+2. **F-100.** The recommended shape is written down: record why a step failed
+   on the step, and have the ceiling message name the last refusal. It is a
+   change to `Step`, `commitStep` and `beginStep`, and it wants a considered
+   shape rather than a quick field.
+3. **Once the WhatsApp token is fixed:** the inbound half of the two-agent
+   test, multi-turn, media, two customers overlapping.
+4. **Then** the fresh-project onboarding — PROMPT.md item 4, deliberately held.
+
+## Things that will bite
+
+- **Cloud Tasks reserves a deleted queue's name for about seven days**, and the
+  name comes from the client id and the agent slug. Rebuilding inside that
+  window needs a different slug. Written up with the rest of the naming rules
+  in `_dev/docs/exigence_agent_naming_and_queues.md`.
+- **`min_instances = 1` is a correctness requirement** (F-027), not a knob, and
+  it is one always-on instance per agent per client. `user-test-1` now runs
+  five services. Answer the cost question before the tenth agent.
+- **Cancelling a run does not purge queued deliveries.**
+- **The root state files are not in any git repo.** The repository root is not
+  a repository. `_dev` is.
+- **Two stranded runs** on `refunds-desk` from before F-097 recovered on their
+  own once the fix landed. If you see runs stuck at sequence 4 on an old image,
+  that is what they are.
+
+## Gates
+
+989 Exigence · 565 Platform API · 34 provisioner · 510 Console. All green, all
+repos clean and pushed.
