@@ -2872,3 +2872,51 @@ path. A refusal that is correct and a failure that is not look identical from
 a span with `status: error` and nothing else on it — the consent refusal
 carries its reason and the span does not keep it.
 
+
+### F-086 · P1 · A client could not have a second agent
+**Did:** Tried to publish a second agent for `user-test-1`, which is the case
+the whole multi-artifact effort of 04–05/09 exists for and the one thing it had
+never been tested with.
+**Saw:** the agent's artifact id was a constant. `createSuperharnessArtifactBundle`
+always produced `exigence.superharness`, so a second publish overwrote the
+first agent's history rather than standing beside it.
+
+**Fixed:** `--artifact-id` names it, defaulting to the old constant so a client
+with one agent keeps the coordinates and the published history it has. Each
+agent gets its own policy resource — pricing and adapters stay shared, because
+a price profile belongs to the deployment, but a policy says what *this* agent
+may do and two agents sharing one would mean changing one changed the other.
+
+### F-087 · P1 · Publishing a second agent conflicts on the shared versions — OPEN
+**Did:** Published the second agent for real, with F-086 fixed.
+**Saw:** `immutable configuration version conflicts`.
+
+The provider, pricing and adapter versions are shared by every agent in a
+project, at fixed coordinates — `(kind, projectId, resourceId, version)`. Their
+*content* includes `publishedAt`, which is the wall clock at publish. So the
+second agent computes byte-identical configuration with a different timestamp,
+the digest differs, and the repository refuses it: the coordinates already hold
+different content.
+
+That refusal is correct and the invariant behind it is right — coordinates
+identify content, which is what lets a revision pin a digest and a runtime
+verify it. What is wrong is that `publishedAt` varies for a resource whose
+identity is supposed to be its coordinates.
+
+**Two ways out, and the second is the real one:**
+
+* **Deterministic `publishedAt` for shared versions.** Makes two publishes
+  produce identical content. Simple, but it only helps going forward: an
+  existing client's stored versions keep their old digests, so a new agent
+  would compute a different digest and conflict exactly as before.
+* **Build the bundle against what is already published.** Read the existing
+  shared versions at those coordinates and have the new revision pin *their*
+  digests rather than newly-computed ones. This is correct for existing clients
+  and new ones, and it is what "shared" should have meant all along. It changes
+  `publishArtifactBundle` and the bundle builders, so it is a real piece of work
+  rather than a patch.
+
+**Until this is fixed a client can have exactly one agent.** Everything the
+routing, authority, inventory and secret work of 04–05/09 was built for is in
+place and correct; this is the one thing standing between it and being usable.
+It is the first thing to do next.
