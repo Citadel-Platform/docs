@@ -3043,3 +3043,23 @@ downstream already permits hyphens.
 
 **Every unit test on this path used a single-word name.** This is the fourth
 defect on this page found by using it rather than by reading it.
+
+
+### F-094 · P2 · An agent whose runtime was not built has no way back — OPEN
+**Did:** Created `bookings-desk` from the console before F-091's coordinates
+were recorded, so its runtime step refused (correctly).
+**Saw:** No way to return to it. The runtime step lives only on the page that
+*creates* an agent, and the id is taken, so the page cannot be reached again.
+
+The agent is published and has no runtime, and nothing in the console offers to
+build one. The Artifacts page should offer it for any agent with no recorded
+runtime — F-078 already records runtimes per artifact, so the console can tell
+which agents lack one.
+
+Not a blocker for a fresh agent: `returns-desk` was created after the
+coordinates were recorded and its runtime built from the same page in one pass.
+It is a blocker for any agent whose first build fails for any reason, which
+over time is most of them.
+
+**Found by hitting it**, which is now the fifth time today that using a page
+found something reading it did not.
