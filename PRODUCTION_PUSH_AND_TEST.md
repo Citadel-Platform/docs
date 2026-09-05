@@ -3375,3 +3375,42 @@ still names only the ceiling. That is a change to `Step`, `commitStep` and
 `beginStep`, and it wants a considered shape rather than a quick field. It
 matters less now that the agent can see refusals and act on them, but an
 operator reading a failed run still cannot see why its steps failed.
+
+
+### F-101 · P1 · Every agent build failed after deploying correctly — FIXED
+**Did:** Built `front-desk`'s runtime from the console. The service came up and
+served a run.
+**Saw:** the job marked `applyFailed`.
+
+> The runtime was deployed at `…-b5ghtra4nq-uc.a.run.app` but was configured to
+> send its own work to `…-351182428948.us-central1.run.app/v1/tasks`, so the
+> steps it schedules would never arrive. Cloud Run issued a different host
+> format than this project expects; set the template's `run_host_suffix` to
+> match it.
+
+**Both halves of that are wrong.** The steps do arrive: Cloud Run issues a
+service two addresses and both reach it, which this repository already knew and
+had written down in the runner's own comments. `front-desk`'s run executed
+sixteen activities across eight cycles against exactly the address the message
+says nothing would reach. And the advice would have undone the deterministic
+addressing the platform moved to on purpose in F-075 — the whole point of which
+was that the address is composable before anything is deployed.
+
+**The cause.** `taskTargetFault` recognises the deterministic form by
+rebuilding it from the service name, the project number and the region, and
+falls back to a whole-string comparison when any of those outputs is missing —
+"an older state without these outputs", as the code says. `exigence-runtime`
+emits all three. `exigence-agent` emitted none of them, so every agent build
+took the fallback, and a deterministic address can never pass it.
+
+Fixed by emitting them, and by making the region a local rather than a literal
+repeated in three places — which is how the composed address and the outputs
+describing it could disagree without anyone noticing.
+
+A test now asserts that any template composing a task target emits all four
+outputs the runner reads. Confirmed to fail with one removed.
+
+**Why it was invisible.** The service deploys, works, and serves runs. Only the
+*job* is marked failed, and only an operator who went looking at the job would
+know. `refunds-desk` and the agents before it are in the same state: deployed,
+working, and recorded as failures.
