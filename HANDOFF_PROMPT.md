@@ -48,7 +48,16 @@ The second is safer and duller. The first is what stops a person having to
 notice. **One run is sitting in this state right now** — deliberately, as
 evidence.
 
-### 2. Re-applying a client runtime fails on its own database (F-082)
+### 2. ~~Re-applying a client runtime fails on its own database~~ — CLOSED 05/09
+
+Fixed and verified; nothing for you to decide. It was written up as a product
+decision and was not one: the blocking `for_each` iterated a resource instead
+of the variable driving it, so `terraform import` could not evaluate the
+configuration at all. Keyed on the variable, the adopt works — the runner logs
+*"Adopted the existing citadel-manifold database into state"* and the apply
+that failed twice with a 409 now finishes clean.
+
+<details><summary>The original write-up, kept for the reasoning</summary>
 `exigence-runtime` on a client who already has Manifold fails with
 `409 Database already exists`, after having updated everything else. The
 database is created with `deletion_policy = ABANDON` because it holds a
@@ -63,8 +72,7 @@ Three ways out are in `PRODUCTION_PUSH_AND_TEST.md` under F-082. **Making the
 `for_each` resolvable is the smallest**; the others change what a teardown
 does, which is not a 2am decision.
 
-**Not blocking.** Every service is deployed and healthy; this costs a red
-provisioning job on re-apply.
+</details>
 
 ## Fixed overnight
 

@@ -2782,7 +2782,24 @@ first attempt reported success at doing nothing.
 The runner now prints Terraform's own words when the adopt fails, so the next
 person sees `Invalid for_each argument` rather than a reassuring sentence.
 
-**Still open, and it needs one of:**
+**CLOSED 05/09/26, and it was never the product decision this said it was.**
+
+The blocking `for_each` iterated a *resource* rather than the variable driving
+it — `for_each = google_secret_manager_secret.provider` in the runtime module.
+Its keys are only knowable once that resource is in state, and `import`
+evaluates the whole configuration before planning anything, so importing *any*
+resource in the module was impossible. Keyed on `var.secret_ids` instead: same
+set, same instances, known at import time.
+
+Verified end to end on `user-test-1`: the runner logged *"Adopted the existing
+citadel-manifold database into state"*, the database left the plan's creates,
+and the apply that had failed twice with `409 Database already exists` finished
+`1 added, 3 changed, 0 destroyed`.
+
+None of the three options below was needed. They are kept because the reasoning
+still applies if the abandonment ever has to be handled some other way.
+
+**The three that were considered and are no longer required:**
 * making the offending `for_each` resolvable without a plan, which would let the
   import work as intended and is the smallest real fix;
 * `lifecycle { prevent_destroy = true }` on the database so it is never
