@@ -3114,6 +3114,22 @@ before   Plan: 23 to add, 0 to change, 23 to destroy
 after    Plan: 32 to add, 0 to change,  0 to destroy
 ```
 
+That plan was applied, and the result is the thing this was all for: two agent
+runtimes standing beside each other, each serving its own artifact on its own
+queue, with the first one untouched.
+
+```
+cit-user-tes-f111-runtime   exigence.superharness               (unchanged)
+cit-user-tes-5bc3-runtime   exigence.superharness.refunds-desk  (new, revision 1, Ready)
+```
+
+`5bc3` is `md5("user-test-1/refunds-desk")[0:4]` — predicted before the apply
+and matched after it. Both are registered in `exigence_artifact_runtimes`, so
+routing can find either.
+
+**The first agent runtime built from the console**, on a client that already
+had one.
+
 **Note on the cost disclosure, which was right.** The console would have shown
 "Apply 23 changes" with each marked as a replace — the summary parser handles
 replaces and counts them in both columns for exactly this reason. Nothing was
