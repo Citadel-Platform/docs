@@ -10,9 +10,12 @@ Modules, Deployments and Devstation are served, rendered and tested. All five
 Baker permissions are superdev-only. The GCP-project precondition is enforced
 once in the service and answers 409 with what to do.
 
-Outstanding, and both are decisions rather than code:
-- **The VM** — `operateDevstationWith` is absent, so start, stop and destroy
-  answer "this deployment cannot act". That is Feature 5.3.
+**The VM was wired on 05/09/26.** `operateDevstationWith` is no longer absent:
+start and stop are Compute API calls, destroy is a Terraform plan that goes
+through the same approval a build does, and the tab now provisions a machine
+as well as operating one. See Feature 5.3.
+
+Outstanding, and it is a decision rather than code:
 - **GitHub access** — `tool/index_baker_modules.dart` indexes a local clone,
   because giving the Platform API a GitHub credential is a decision about where
   Citadel's supply chain may be read from.
@@ -106,7 +109,12 @@ The page carries:
       against the catalogue's 3.0.2 and `conduit-instrumentation` 1.1.0 against
       1.4.0, while staging is current. The drift the tab exists to show is now
       something the tab can be wrong about.
-- [ ] Rollout configuration and the Staging preview audience are editable
-- [ ] Devstation provisions, stops and destroys through reviewed Terraform, and
-      Console state matches the Compute API after every transition
-- [ ] SSH works through IAP/OS Login with no public ingress
+- [ ] Rollout configuration and the Staging preview audience are editable.
+      `PlatformBakerService.configureRelease` enforces the two rules a form
+      cannot — a canary outside 1–99 is not a canary, and a preview audience
+      on anything but Staging is a list nothing consults — but the Deployments
+      tab has no editor calling it.
+- [x] Devstation provisions, stops and destroys through reviewed Terraform,
+      and Console state matches the Compute API after every transition
+      (05/09/26, driven in Chrome against `user-test-1`).
+- [x] SSH works through IAP/OS Login with no public ingress (05/09/26)

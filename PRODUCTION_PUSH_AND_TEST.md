@@ -3483,3 +3483,66 @@ Two things I put in `user-test-1` that are not real:
 Neither is harmful and both are obviously synthetic, but they are in the
 client's data and should be removed before anybody demonstrates from this
 project.
+
+### F-102 · P2 · Start offered for a machine that does not exist
+**Did:** Opened Baker → Devstation on a project with no Devstation.
+**Saw:** a live Start button. Pressing it can only produce "there is nothing
+to act on".
+**Root cause:** the button was disabled on `running` alone.
+**Fixed:** disabled on `notConfigured` too, with a test.
+
+### F-103 · P2 · The provision panel named an approval page that does not exist
+**Did:** Read the panel's own instruction: "approve it on Provisioning".
+**Saw:** there is no Provisioning page. Approval in this console happens in an
+embedded `ProvisioningStep` and nowhere else.
+**Fixed:** by using `ProvisioningStep` itself rather than sending anybody
+anywhere. Choosing the machine's shape now reveals the same plan, cost panel
+and approval every other build goes through.
+
+### F-104 · P1 · Templates that never enabled the services they build into
+**Did:** Applied the Devstation template to `testproj-448205`.
+**Saw:** `Error creating Disk: Compute Engine API has not been used in project
+testproj-448205 before or it is disabled` — nineteen resources planned, four
+created, the failure twenty minutes and one approval after the decision.
+**Root cause:** the template never enabled Compute. The client had Cloud Run,
+Firestore and Secret Manager from their Exigence build and had never had a
+reason for Compute.
+**The three this found that matter more:** `client-data-plane` creates every
+one of a client's Firestore databases and never enabled Firestore — sixteen
+successful applies, every one against a project that already had it from an
+Exigence build. `exigence-runtime` declares the Manifold database while the
+module is what enables Firestore, with nothing ordering the two.
+`exigence-agent` likewise for its queue, its routing document and its channel
+secrets. **A genuinely fresh project — the path every future client takes —
+would have failed partway through all three.**
+**Fixed:** each template enables the services its own resources need;
+`disable_on_destroy = false` throughout. The test checks the mapping from
+resource prefix to service, so adding a resource from a service the template
+does not enable is what fails. It was vacuous when first written (an escaped
+`$` made the regex a literal) and was corrected after checking that removing
+an enablement makes it fail.
+
+### F-105 · P1 · The provisioner could not build a Devstation in a client project
+**Saw:** `Required 'compute.networks.create' permission`, then, once that was
+granted, `You don't have permission to create the custom project role`.
+**Root cause:** the provisioner's role list had no Compute and no
+`iam.roleAdmin`. Creating a custom role needs `iam.roles.create`, which
+`resourcemanager.projectIamAdmin` does not confer — that grants *assigning*
+roles, not defining them.
+**Fixed:** `roles/compute.admin` and `roles/iam.roleAdmin` added to all three
+places that must agree — the bootstrap's list, the client-host environment and
+the provisioner module — and to the test that exists because two spellings
+which could disagree is the drift that shows up as a half-built client.
+The same failure this list keeps producing, and its own comment says so.
+
+### F-106 · P1 · A teardown could be planned and never approved
+**Did:** Pressed Destroy on a built Devstation.
+**Saw:** a job planning `0 to add, 0 to change, 23 to destroy` — and nowhere
+in the console to approve it. The provisioning step only appeared when there
+was no machine, and a teardown is only ever asked for when there is one.
+**Fixed:** confirming a teardown now puts the provisioning step on the page,
+planning with `-destroy`. Same plan-approve-apply machinery as a build,
+because a teardown that skipped the approval would be the one irreversible
+button in the console. The button says "Destroy 23 resources", not "Apply 23
+changes" — true, and the wrong sentence to read before deleting a client's
+machine.
