@@ -60,7 +60,13 @@ or upgrade engine.
 - [x] Non-superdev identities cannot discover or invoke Factory. The Console
       surface sits behind the superdev-only Baker permissions, and the CLI is
       a repository checkout rather than a service anybody can reach.
-- [ ] The context pack lets an operator-directed coding agent use the assets
-      correctly. Task 5.1.3 is the one part not built: there is no
-      source-controlled context pack yet, and the modules' own READMEs are
-      what a coding agent currently has.
+- [x] The context pack lets an operator-directed coding agent use the assets
+      correctly (05/09/26). `agent-context-pack` is a module like any other —
+      versioned with the assets it describes, written by the same apply, and
+      recorded in the lock beside them — and installs as `AGENTS.md` at the
+      root of the generated repository. It states what the generated code
+      already does: the empty records screen that is deliberate, the three
+      seams whose default is inert on purpose, and that Baker owns the first
+      commit and nothing after it. The failure it is written against is a
+      coding agent helpfully filling the records screen with plausible
+      customers.
