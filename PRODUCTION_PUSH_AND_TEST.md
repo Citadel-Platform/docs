@@ -3045,7 +3045,7 @@ downstream already permits hyphens.
 defect on this page found by using it rather than by reading it.
 
 
-### F-094 · P2 · An agent whose runtime was not built has no way back — OPEN
+### F-094 · P2 · An agent whose runtime was not built has no way back — FIXED
 **Did:** Created `bookings-desk` from the console before F-091's coordinates
 were recorded, so its runtime step refused (correctly).
 **Saw:** No way to return to it. The runtime step lives only on the page that
@@ -3063,6 +3063,17 @@ over time is most of them.
 
 **Found by hitting it**, which is now the fifth time today that using a page
 found something reading it did not.
+
+**Fixed:** `/exigence/agents/:agentId/runtime` is the same build on its own
+page, reached from a link on every agent row. Offered for every agent rather
+than only those without a runtime, because the Artifacts page does not know
+which have one — and a build for an agent that already has one plans nothing,
+which is a safe answer and an informative one. The page says so before the plan
+runs, so "nothing to do" does not read as a failure.
+
+Verified by driving it: `bookings-desk`, stranded since it was created before
+F-091's coordinates were recorded, was given its runtime from the Artifacts
+page.
 
 
 ### F-095 · P0 · A client's agents shared one Terraform state — FIXED
