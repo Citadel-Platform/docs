@@ -3430,3 +3430,56 @@ working, and recorded as failures.
 runtime was re-applied from the console and the job reported `applied` — the
 same build that had reported `applyFailed` an hour earlier against the same
 service.
+
+
+## 05/09/26 — the Manifold workflows, after the WhatsApp account was verified
+
+The operator verified the Meta account and the block lifted. Everything below
+was driven live, on `user-test-1`, against the real number.
+
+**Inbound reaches the right agent.** A customer message started
+`exigence.superharness.front-desk` — the *second* agent — with
+`triggerSource: channel`. The `whatsapp` binding had been moved off
+`exigence.superharness`, which is disabled, and the delivery followed the
+binding. **Two agents on their own lines, proven with one number**: routing
+follows the artifact inbound as well as out.
+
+**The agent replied for real.** "Hi" at 16:51:26 → *"Hello! Welcome to our
+support service. How can I help you today?"* at 16:51:35, with a Meta message
+id. Nine seconds, unattended, `replyApproval: automatic`.
+
+**Multi-turn holds context.** The follow-up "What is this for" ran two
+`manifold.correlate` calls to read the thread before deciding.
+
+**An operator can answer by hand.** Replied from the Console inbox; it sent and
+appears in the thread with no run id, correctly — a person sent it, not an
+agent. Drafts and internal notes are on the same surface.
+
+**Two customers at once.** Two signed webhooks from different numbers,
+dispatched concurrently: two separate conversations, two separate runs, both
+succeeded, no cross-contamination. One attempted a reply and got
+`(#131030) Recipient phone number not in allowed list` — the app's
+development-mode allowlist, correct for a number that is not on it. The refusal
+came back as an answer and the run ended cleanly rather than burning its
+ceiling: **F-100 working on a real provider refusal.**
+
+**Consent survived all of it.** The ledger still holds exactly one
+`opted_in` recipient.
+
+### Still untested
+
+**Media.** Needs an image sent from the operator's phone.
+
+### Test data left in the client
+
+Two things I put in `user-test-1` that are not real:
+
+- A synthetic inbound message timestamped `2026-09-05T17:20:00Z` — *future
+  dated*, because I used a fixed epoch in the probe payload. It sorts to the
+  top of the conversation and to `lastMessageAt` until real time passes it.
+- Two invented conversations, `+447700900111` and `+447700900222`, from the
+  overlapping-customers test.
+
+Neither is harmful and both are obviously synthetic, but they are in the
+client's data and should be removed before anybody demonstrates from this
+project.
