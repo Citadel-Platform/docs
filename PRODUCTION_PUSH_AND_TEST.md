@@ -3237,3 +3237,25 @@ to be unrecoverable were not.
 That last part is worth keeping. The prediction that they could not recover was
 wrong because it was made about the *first* fix, which added a bound to those
 activities. The second fix does not, so they resumed where they had stopped.
+
+
+### F-098 · P2 · Two agents could collide on every resource they own — FIXED
+**Did:** Wrote down the slug convention, and noticed while writing it that
+nothing enforces the part that matters.
+**Saw:** An agent's Cloud Run service, queue and both service accounts are all
+named from `md5(client/slug)`, and the slug is the last segment of the artifact
+id cut to thirteen characters. "Bookings Desk East" and "Bookings Desk West"
+slug to the same thing.
+
+Two agents with one slug are one deployment wearing two names. Nothing checked
+it: the console derives the slug silently, the artifact ids differ so the
+existing duplicate check passes, and Terraform would have reported a name
+conflict late in an apply — after the agent was published and looked fine.
+
+Refused where a name becomes a slug, naming the agent that already holds it and
+saying what to do about it.
+
+**Found by writing the documentation.** The convention had lived in three
+places — the console's derivation, the template's validator and the resource
+naming — and none of them had ever been stated together. Writing them on one
+page made the gap between them obvious.
