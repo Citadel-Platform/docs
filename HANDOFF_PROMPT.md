@@ -1,142 +1,138 @@
-# Handoff — 05/09/26, evening
+# Handoff — 05/09/26, late
 
-**An agent's whole life is a Console action now.** Create it, give it a
-runtime, start it, switch it off. That sentence is what changed today, and
-every defect below was found on the way to being able to say it.
+**Baker is built.** That is what changed in the second half of the day, and
+almost every defect below was found on the way to being able to say it.
 
-## One thing needs you, and nothing else can move without it
-
-**Meta has blocked the WhatsApp channel.**
-
-```
-ChannelRefusedError: whatsapp refused the message:
-Meta refused the message: API access blocked. (code 200)
-```
-
-The same channel sent successfully on 04/09 at 19:01. Code 200 is a permission
-or capability problem, and the likeliest cause is that the access token in
-Secret Manager was a temporary one — those last 24 hours, and 04/09 19:01 is
-about that long before this started failing.
-
-**Issue a permanent WhatsApp access token and update the channel secret**, or
-confirm the Business account is not restricted. Nothing in Citadel can resolve
-it.
-
-It blocks everything that needs a real message to move: the inbound half of two
-agents on their own lines, multi-turn conversation, media, and two customers
-overlapping. Everything up to Meta is proven — the agent decided to send, the
-runtime called the API with the client's own credentials, and the refusal came
-back with its reason intact.
+Nothing is blocked on you. The WhatsApp channel that stopped the morning was a
+Meta account state and the operator resolved it; Manifold has since been proven
+end to end.
 
 ## What is true now
 
-`user-test-1` holds seven artifacts, four agent runtimes and a receiver.
+`user-test-1` holds seven artifacts and three agent runtimes, and **every Cloud
+Run service in the project is on the current Exigence image**
+(`c56f39d8…`) — the client runtime, its receiver and all three agents.
 
 | artifact | rev | name | state |
 | --- | --- | --- | --- |
 | `exigence.reference.summary` | 1 | Reference summary | job, on the client runtime |
-| `exigence.superharness` | 3 | Superharness | **disabled**; its runtime is dormant by design |
+| `exigence.superharness` | 3 | Superharness | **disabled**; runtime `f111` (slug `wa2`) |
+| `exigence.superharness.front-desk` | 1 | Front Desk | runtime `37bd`; answers `whatsapp`, sends itself |
+| `exigence.superharness.refunds-desk` | 1 | Refunds Desk | runtime `5bc3`; has run and succeeded |
+| `exigence.superharness.bookings-desk` | 1 | Bookings Desk | no runtime |
 | `exigence.superharness.deliveries` | 1 | Superharness | no runtime |
-| `exigence.superharness.bookings-desk` | 1 | Bookings Desk | runtime building |
 | `exigence.superharness.returns-desk` | 1 | Returns Desk | no runtime |
-| `exigence.superharness.refunds-desk` | 1 | Refunds Desk | `5bc3`, has run and succeeded |
-| `exigence.superharness.front-desk` | 1 | Front Desk | `37bd`, answers `whatsapp`, sends itself |
 
 `front-desk` is the only enabled agent bound to the channel, which is what the
 router requires — two enabled agents on one channel is refused rather than
 resolved by ordering.
 
-**A run started from the Console finished properly**: three decisions, two
-actions, then the agent stopped on its own, with per-step cost metered.
+**Manifold is proven end to end**: inbound to the right agent, unattended reply
+with a real `wamid`, multi-turn, media stored and acknowledged, two customers
+at once on separate threads, an operator reply by hand from the inbox, consent
+ledger intact.
 
-## Fixed today
+**Baker is complete.** Factory takes a clean repository to a running Flutter
+application; the Devstation provisions, starts, takes an SSH session, stops and
+destroys from the Console; all four Baker tabs are served with real data.
 
-F-087 · a second agent publishes against the shared versions already stored
-F-088 · adding an agent is a Console page, not a command-line tool
-F-089 · an agent is called what it was named
-F-090 · builds no longer reach the public provider registry, and a failed
-`init` is reported instead of swallowed
-F-091 · an agent's runtime coordinates come from what the client's build
-recorded, never from the caller
-F-093 · an agent may have a two-word name
-F-094 · an agent can be sent back to its runtime build
-F-095 · a client's second agent no longer destroys their first
-F-096 · an agent is started on the runtime that serves it
-F-097 · every activity transition is the record with a new status
-F-098 · two agents whose resources would collide are refused
-F-099 · disabling an agent no longer crash-loops its runtime
-F-100 · a provider's refusal is an answer the agent can read, not a thrown
-error nothing records
-F-101 · an agent's deterministic address is recognised, so a build that
-deployed correctly is no longer reported as failed
+## Fixed in the second half of 05/09
+
+F-102 · Start was offered for a machine that does not exist
+F-103 · the provision panel named an approval page that does not exist
+F-104 · **four templates never enabled the services they build into**
+F-105 · the provisioner had no Compute or custom-role permission in a client's
+project, so a Devstation apply died partway after approval
+F-106 · a teardown could be planned and never approved
+F-107 · the module indexer reported `recipes/` as unreadable
+F-108 · **an agent planned against a Terraform state that was not its own**
+
+And the three carried over from the morning's list: a failed step now records
+why (F-100's other half), a delivery for a finished run succeeds instead of
+being retried forever, and a refusal, a ceiling and a real failure are three
+trace categories rather than one.
 
 Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 
-## The four worth reading
+## The two worth reading
 
-All four were **silent** — they reported something true and unhelpful, or
-nothing at all.
+- **F-104.** The Devstation's first apply died at "Compute Engine API has not
+  been used in project … before or it is disabled" — nineteen resources
+  planned, four created, the failure twenty minutes and one approval after the
+  decision. The test written to pin that found three more, and they matter far
+  more than the one that caused it. **`client-data-plane` creates every one of
+  a client's Firestore databases and never enabled Firestore.** It had applied
+  sixteen times without failing, because every one of those projects already
+  had Firestore from an Exigence build. Invisible to every existing client and
+  fatal to the next one. `exigence-runtime` and `exigence-agent` had the same
+  latent race.
 
-- **F-090.** Every client build downloaded its providers from
-  registry.terraform.io and got rate-limited. What the operator saw was not the
-  429 — it was the empty lock file the failed download left behind, because the
-  runner ran `init` and never checked its exit code.
-- **F-095.** Building a client's second agent planned `23 to add, 0 to change,
-  23 to destroy` — the whole of the agent answering their live line. The runner
-  kept one Terraform state per template per project and said so in a comment
-  that was true of every template until, that same morning, a client could have
-  more than one agent.
-- **F-097.** A P0 regression from F-080. An activity's identity is everything
-  about it but its status, and `abandonedAfter` was added to activities created
-  without it — so every step of every run on every configured deployment
-  conflicted with itself and retried to its ceiling. **977 tests missed it
-  because none of them set a step deadline**, and the in-memory journal did not
-  enforce the rule the real one does — which a comment in that very file had
-  already warned about.
-- **F-100 (open).** A run that ends at its ceiling says the agent spent its
-  decisions and never says every one of them was refused by Meta. F-090's
-  lesson in a third place.
+  This is the argument for the onboarding run, in one defect.
+
+- **F-108.** Rolling `exigence.superharness` forward planned `32 to add, 0 to
+  change, 0 to destroy` — a second complete runtime beside the one already
+  serving, under different names so nothing would even have collided. Not
+  applied. The agent was built with the slug `wa2`; the Console derives
+  `superharness` from the agent id, and a slug decides both the Terraform state
+  and the resource names. It is F-095's failure from the other side: not two
+  agents sharing one state, but one agent pointed at a state that is not its
+  own.
+
+  It took three passes. The first fix looked only for jobs recorded `applied`
+  and found nothing — every one of that agent's thirteen builds is
+  `applyFailed`, because Terraform created the resources and the post-apply
+  routing check then failed the job. The second missed that `approveAndApply`
+  re-derives the slug too, so the apply could not find its own plan file.
 
 ## Next, in order
 
-1. **Once the WhatsApp token is fixed:** the inbound half of the two-agent
-   test, multi-turn, media, two customers overlapping. `front-desk` is already
-   the only enabled agent bound to the channel, so an inbound message should
-   reach it — that is the test, and it needs one message from your phone.
-2. **F-100's remaining half.** A step records no reason for failing, and the
-   ceiling message names only the ceiling. The cause is fixed — refusals now
-   reach the agent — but an operator reading a failed run still cannot see why
-   its steps failed. It is a change to `Step`, `commitStep` and `beginStep`,
-   and it wants a considered shape rather than a quick field.
-3. **Bring the last two agent runtimes forward.** `5bc3` and `f111` are on the
-   previous image. Re-applying them from their runtime pages is enough; the
-   template default is the newest image, so drift only ever moves forward now.
-4. **Then** the fresh-project onboarding — PROMPT.md item 4, deliberately held.
-
-## Terraform drift: reconciled
-
-Five services had been rolled with `gcloud` during the F-097 and F-099 fixes.
-They were re-applied from the Console, so Terraform owns the images again, and
-the template default is pinned to the newest build — which means any future
-apply moves forward and never rolls a fix back. That trap is closed.
+1. **The fresh-project onboarding** — PROMPT.md item 4, deliberately held for
+   an explicit green light. It is the highest-value verification left: three of
+   today's defects were only reachable from a project that had never had the
+   service in question, which is every future client's first day.
+2. **A browser smoke test of a generated application.** Factory's
+   clean-repository test runs `flutter analyze` and `flutter test` on the
+   result; nothing drives the running application.
+3. **`axis-education` has zero provisioning jobs of any template** — the one
+   real production client, and nothing in the record says how their
+   infrastructure came to exist.
+4. **`test-sandbox`** stays Exigence-blocked until ~09/09/26 on the queue-name
+   reservation. Waiting, not working.
 
 ## Things that will bite
 
+- **A stale plan outlives the defect that produced it.** A plan stays adoptable
+  for an hour, so both of F-108's duplicate-build plans were still offerable
+  after the fix was deployed, and both had to be marked superseded by hand.
+  Nothing invalidates a plan when the thing that made it wrong changes. If you
+  see a plan proposing to create what already exists, do not apply it.
+- **An agent's slug is not derivable from its id.** It is a recorded fact about
+  what was built. `exigence.superharness` is `wa2`. The naming rules are in
+  `_dev/docs/exigence_agent_naming_and_queues.md`.
 - **Cloud Tasks reserves a deleted queue's name for about seven days**, and the
   name comes from the client id and the agent slug. Rebuilding inside that
-  window needs a different slug. Written up with the rest of the naming rules
-  in `_dev/docs/exigence_agent_naming_and_queues.md`.
-- **`min_instances = 1` is a correctness requirement** (F-027), not a knob, and
-  it is one always-on instance per agent per client. `user-test-1` now runs
-  five services. Answer the cost question before the tenth agent.
-- **Cancelling a run does not purge queued deliveries.**
+  window needs a different slug.
+- **A warm instance is now a choice, not a constant.** `runtime_min_instances`
+  is an input on both Exigence templates and a control in the Console. A client
+  whose artifacts are all single-step may scale to zero; an agent may not,
+  because a decide/act loop delivers its own next step to itself (F-027). The
+  cost question at twenty agents is still open.
+- **Factory runs from a terminal, not from the Platform API.** A bootstrap
+  installs dependencies, runs a build and launches an application, and Cloud
+  Run has no workspace to do that in. The Console's Bootstrap tab is the guided
+  half, and it says so.
 - **The root state files are not in any git repo.** The repository root is not
-  a repository. `_dev` is.
-- **Two stranded runs** on `refunds-desk` from before F-097 recovered on their
-  own once the fix landed. If you see runs stuck at sequence 4 on an old image,
-  that is what they are.
+  a repository. `_dev`, `citadel_core`, `citadel_core/exigence`,
+  `citadel_platform`, `citadel_cli` and `baker-modules` each are — and
+  `citadel_core/exigence` is separate from `citadel_core`, which is easy to
+  miss when committing.
 
 ## Gates
 
-994 Exigence · 565 Platform API · 37 provisioner · 510 Console. All green, all
+Exigence 1001 tests: 876 pass, 125 skipped. Every skip is
+`!emulatorAvailable` — they need the Firestore emulator running, and it is
+worth starting it occasionally, because F-097 hid in exactly that gap between
+the in-memory journal and the real one.
+
+593 Platform API · 524 Console · 50 provisioner · 12 Factory. All green, all
 repos clean and pushed.
