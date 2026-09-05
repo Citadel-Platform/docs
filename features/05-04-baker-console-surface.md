@@ -109,11 +109,16 @@ The page carries:
       against the catalogue's 3.0.2 and `conduit-instrumentation` 1.1.0 against
       1.4.0, while staging is current. The drift the tab exists to show is now
       something the tab can be wrong about.
-- [ ] Rollout configuration and the Staging preview audience are editable.
-      `PlatformBakerService.configureRelease` enforces the two rules a form
-      cannot — a canary outside 1–99 is not a canary, and a preview audience
-      on anything but Staging is a list nothing consults — but the Deployments
-      tab has no editor calling it.
+- [x] Rollout configuration and the Staging preview audience are editable.
+      Built with the tab on 31/08/26 — the strategy selector, the canary
+      share, and the preview-audience dialog, all calling
+      `configureBakerRelease`, with the service enforcing the two rules a form
+      cannot: a canary outside 1–99 is not a canary, and a preview audience on
+      anything but Staging is a list nothing consults.
+
+      Recorded as outstanding on 05/09/26 in error — written from the service
+      side without opening the tab. Corrected the same day, and the editor is
+      now covered by a widget test rather than by a reading of the code.
 - [x] Devstation provisions, stops and destroys through reviewed Terraform,
       and Console state matches the Compute API after every transition
       (05/09/26, driven in Chrome against `user-test-1`).
