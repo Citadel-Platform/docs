@@ -33,7 +33,35 @@ from `main`. Suites: **966** Exigence, **550** Platform API, **27** provisioner,
 
 ## Open, and each needs a decision
 
-### 1. A run stranded mid-step cannot be cancelled (F-080)
+### 1. ~~A run stranded mid-step cannot be cancelled~~ — DONE 05/09
+
+Built as you asked: the operator override, with the distinction you insisted on.
+
+"Slow" and "abandoned" are now told apart by **evidence, not a timer**. Cloud
+Run enforces a 900s request deadline on the runtime, so past it the process
+that started an activity is gone by definition. Each attempt records
+`abandonedAfter` when it begins, and one Terraform local drives both the
+service's `timeout` and the value the runtime is told — two copies of that
+number would drift, and the whole point is that the bound is the deployment's
+own.
+
+Cancellation now answers three different things:
+
+* something may still be working → refused, wait (unchanged);
+* nothing is working, nobody has said so → refused, with the sentence saying
+  what the operator is being asked to decide;
+* the operator said the evidence is not coming → cancelled, with
+  `abandonEvidence` recorded in the durable command beside their reason.
+
+In the Console the dialog stops saying "Retry" — which was advice for a
+different situation — and says **"Nothing is working on this run"**, explains
+that a step may already have reached a customer, and offers **"Cancel anyway"**.
+Pressing it is the answer; the first attempt never writes anything off.
+
+An activity written before this has no bound and reads as *"cannot tell"*,
+never as abandoned.
+
+<details><summary>The original write-up</summary>
 A step that was in flight when its instance was recycled waits for evidence
 that can never arrive. The run cannot proceed and cannot be cancelled, and the
 refusal is correct — the tool may already have put a message on somebody's
@@ -44,9 +72,16 @@ missing is a way out. Two honest options:
 * a supervisor that ages in-flight activities out after a bounded wait;
 * an explicit operator override that records the evidence was never coming.
 
-The second is safer and duller. The first is what stops a person having to
-notice. **One run is sitting in this state right now** — deliberately, as
-evidence.
+</details>
+
+## Meta is currently blocking the test line
+
+The last sends failed with `Meta refused the message: API access blocked
+(code 200)` — their side, after tonight's message volume on the test app. The
+platform routed, authorised, sent and reported the refusal legibly; the
+successful send at 19:01 is the proof the path works. Expect it to clear on its
+own; if it does not, the WhatsApp app's status in Meta's console is where to
+look.
 
 ### 2. ~~Re-applying a client runtime fails on its own database~~ — CLOSED 05/09
 
