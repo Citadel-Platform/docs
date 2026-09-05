@@ -3289,3 +3289,64 @@ this one is somebody having pressed Disable.
 
 **Verified live**: `cit-user-tes-f111-runtime` reports Ready, and its log says
 `Citadel Exigence runtime is dormant: its artifact is disabled.`
+
+
+### BLOCKED · Meta has blocked the WhatsApp channel — needs the operator
+**Did:** Ran `front-desk` with a payload asking it to greet the customer on
+WhatsApp. It replies automatically, so it should have sent.
+**Saw:** every send refused.
+
+```
+ChannelRefusedError: whatsapp refused the message:
+Meta refused the message: API access blocked. (code 200)
+```
+
+Not a Citadel fault. The same channel sent successfully on 04/09 at 19:01, so
+something changed on Meta's side since. Code 200 in the WhatsApp Cloud API is a
+permission or capability problem, and the most likely cause is that the access
+token in Secret Manager was a temporary one — those last 24 hours, and 04/09
+19:01 is about that long before this failed.
+
+**What the operator needs to do:** issue a permanent WhatsApp access token and
+update the channel secret, or confirm the Business account is not restricted.
+Nothing in Citadel can resolve it.
+
+**What it blocks.** Everything that needs a real message to move: the inbound
+half of two-agents-on-their-own-channels, multi-turn conversation, media, and
+two customers overlapping. The outbound half is proven up to the point Meta
+refuses — the agent decided to send, the runtime called the API with the
+client's own credentials, and the refusal came back with its reason intact.
+
+**What it proved anyway.** The failure path is sound. The refusal came back as
+a readable sentence rather than a stack trace, the agent kept its own counsel
+about what to do next, and when it had spent its eight decisions the run ended
+with a plain explanation instead of stranding — F-085 working exactly as
+written.
+
+### F-100 · P2 · A run that ends at its ceiling does not say what was failing — OPEN
+**Did:** Read the failed `front-desk` run as an operator would.
+**Saw:**
+
+> This agent reached the 8 decisions it was published with and stopped.
+> Nothing further was attempted.
+
+True, and it hides the only thing worth knowing: every one of those decisions
+ended in `Meta refused the message: API access blocked`. The failed step
+records no reason at all — `{runId, stepId, sequence, activityIds, status}` —
+and the refusal exists only in a Cloud Run log nobody is reading.
+
+This is F-090's lesson again in a third place: **the consequence was reported
+and the cause was not.** An operator sees an agent that used up its budget, and
+has no way to learn that their WhatsApp channel is switched off.
+
+**Recommended fix, not yet made because it is a design choice rather than a
+plain defect.** Refusals are deliberately fed back to the agent as answers —
+that is the whole shape of the superharness, and it is right. So the fix is not
+to fail the run on the first refusal. It is to *carry* the reason: record why a
+step failed on the step, and have the ceiling message name the last refusal
+when there is one. That is a change to `Step`, to `commitStep`, and to
+`beginStep`'s message.
+
+Worth doing before a client ever reads one of these. Not done here because it
+wants a considered shape rather than a quick field, and because the session had
+already found nine other things.
