@@ -1,17 +1,77 @@
-# Handoff — 05/09/26
+# Handoff — 05/09/26, late
 
-Overnight session, then a second pass closing the gaps that stood between the
-platform and a real client.
+**A client can have as many agents as they want, and the console is how they
+get one.** That sentence is the whole of what changed today. The previous
+handoff opened by saying a client could have exactly one; F-087 was why, and it
+is fixed and proven live.
 
-## Read this first
+## What is true now
 
-**A client can have exactly one agent today.** Everything the routing,
-authority, inventory and secret work was built for is in place and correct.
-One thing stands between it and being usable, it is understood, and it is
-written up as **F-087** below. That is the first thing to do.
+`user-test-1` holds three superharness artifacts. One of them,
+`exigence.superharness.bookings-desk`, was created end to end from the console
+by a signed-in operator: named, instructed, given a ceiling and a reply policy,
+and published. Its Palisade authority came from the deployment, never from the
+browser.
 
-The operator has an empty GCP project waiting. **Do not use it yet** — see
-"Before the empty project" at the bottom.
+Everything of 04/09 still holds: a customer's WhatsApp message reaches an
+agent, runs it, and the agent replies unattended. Consent is enforced against
+the ledger. Routing follows the artifact because every Exigence queue rewrites
+the host.
+
+## The one thing in flight
+
+An agent's runtime is built from coordinates the *client's* build records —
+its name prefix, database and payload bucket (F-091). The provisioner image
+that records them was deployed at 03:26; the client's last build ran before
+it. So the New agent page's runtime step currently refuses with:
+
+> This project records no Exigence runtime for an agent to be built beside.
+> Build the service first, or build it again if it was built before Citadel
+> recorded what an agent needs.
+
+That refusal is correct and says what to do. **Run the Exigence build once
+more from the console, then build `bookings-desk`'s runtime from the New agent
+page.** That is the next thing, and it is one build away.
+
+## What today's defects have in common
+
+Five were found and fixed: F-088, F-089, F-090, F-091, F-093. Four of them
+were found by *using the page*, not by reading the code or the tests. The last
+one is the clearest: every unit test on the agent path used a single-word
+name, so nothing caught that `agent_id` refused the hyphen the console's own
+slug produces. The form could not create an agent called "Bookings Desk".
+
+F-090 is the one worth reading twice. Every client build downloaded its
+providers from registry.terraform.io, from a fresh container with no cache.
+The registry rate-limited it. What the operator was shown was not the 429 — it
+was the empty lock file the failed download left behind, because the runner
+ran `init` and never checked it. Providers are mirrored into the image now and
+`init` is checked; but the general lesson is that a swallowed exit code turns
+a fixable failure into a misleading one.
+
+## Still untested
+
+- Two agents answering their own channels. This needs a second WhatsApp
+  number; the one test number is bound to `exigence.superharness`.
+- A multi-turn conversation, an image, two customers overlapping.
+- An agent runtime built from the console (blocked only by the build above).
+
+## Before the empty GCP project
+
+Do the list in `CURRENT_TASK.md` in order. Onboarding a fresh project before
+two agents have been seen answering means debugging two unknowns at once.
+
+## Things that will bite
+
+- Cloud Tasks reserves a deleted queue's name for about seven days, and the
+  name comes from the client id. `test-sandbox` stays blocked until ~09/09/26.
+- `min_instances = 1` is a correctness requirement (F-027), not a knob. It is
+  also one always-on instance per artifact per client. Answer the cost
+  question before the tenth agent.
+- Cancelling a run does not purge queued deliveries.
+- The root state files are not in any git repo. The repository root is not a
+  repository.
+
 
 ## What works, proven live on `user-test-1`
 
@@ -31,109 +91,36 @@ Consent is enforced for real: a "STOP" from the test number blocked every reply
 until "start" opted back in. Approval gating works in both directions. Refusals
 carry their reasons rather than leaking stack traces.
 
-**Suites:** 973 Exigence · 552 Platform API · 27 provisioner · 500 Console.
-All repos clean and synced; everything deployed on images carrying every fix
-below.
-
-## F-087 — the one blocker, and the first job
-
-Publishing a **second** agent fails with `immutable configuration version
-conflicts`.
-
-Provider, pricing and adapter versions are shared by every agent in a project,
-at fixed coordinates `(kind, projectId, resourceId, version)`. Their *content*
-includes `publishedAt`, the wall clock at publish. So a second agent computes
-byte-identical configuration with a different timestamp, the digest differs,
-and the store correctly refuses — those coordinates already hold different
-content.
-
-The refusal is right and so is the invariant: coordinates identify content,
-which is what lets a revision pin a digest and a runtime verify it. What is
-wrong is that `publishedAt` varies for a resource whose identity is supposed to
-*be* its coordinates.
-
-**Do the second option, not the first:**
-
-* *Deterministic `publishedAt` for shared versions* — simple, and only helps
-  going forward. An existing client's stored versions keep their old digests,
-  so a new agent still conflicts.
-* **Build the bundle against what is already published.** Read the existing
-  shared versions at those coordinates and have the new revision pin *their*
-  digests rather than newly-computed ones. Correct for existing and new clients
-  both, and what "shared" should have meant all along. It changes
-  `publishArtifactBundle` and the bundle builders.
-
-I stopped rather than half-implement it: a botched job there corrupts published
-artifact history.
-
 ## Fixed since the last handoff
 
-| | |
-|---|---|
-| F-080 | A run stranded mid-step can be cancelled. "Slow" and "abandoned" are told apart by **evidence, not a timer** — Cloud Run's 900s deadline, with one Terraform local driving both the service `timeout` and `CITADEL_STEP_DEADLINE_SECONDS`. Cancellation answers three things now: may still be working (wait), nothing is working and nobody has said so (decide), the operator said so (cancelled, recorded). The Console says **"Nothing is working on this run"** and offers **"Cancel anyway"** instead of "Retry". |
-| F-082 | Re-applying a client runtime no longer fails on `409 Database already exists`. It was never the product decision it was written up as: the blocking `for_each` iterated a *resource* instead of the variable driving it, so `terraform import` could not evaluate the config at all. |
-| F-084 | An agent may read the channel secrets it replies through. `manifold = null` correctly says an agent has no line to *receive* on, and silently removed the secrets it needs to *send*. |
-| F-085 | Reaching the step ceiling ends the run instead of stranding it, with a sentence an operator can read. |
-| F-086 | A client *can* have a second agent — the artifact id was a constant, so a second publish would have overwritten the first's history. Blocked in practice by F-087. |
+- **F-087** a second agent publishes against the shared versions already
+  stored. Proven live: all four reported as adopted.
+- **F-088** adding an agent is a console page. `POST …/exigence/agents`, gated
+  on `exigence.agents.publish`.
+- **F-089** an agent is called what it was named.
+- **F-090** a client build no longer reaches the public provider registry, and
+  a failed `init` is reported rather than swallowed.
+- **F-091** an agent's runtime coordinates are resolved from what the client's
+  build recorded, not taken from the caller.
+- **F-093** an agent may have a two-word name.
 
-Earlier the same session: F-077 (reply approval, chosen in the Console),
-F-078 (agent runtimes visible and drift-checked), F-079 (a settings save cannot
-drop an offering), F-081 (the configuration publisher cannot be forgotten),
-F-083 (a revision published after boot is the one that loads).
-
-## Still untested, and it matters
-
-Everything above was proven **once, on one client, with one agent, on one test
-number**. That is a demo, not a rollout.
-
-- **Two agents in one project** — blocked on F-087. This is the case the whole
-  multi-artifact effort exists for and the one thing it has never run with.
-- **A genuinely fresh client onboarding.** The bootstrap was re-run on an
-  already-admitted project and reported *"All of them were already granted"*,
-  so the real path never executed.
-- **Anything beyond one message** — no multi-turn conversation, no media, no
-  two customers at once, no concurrency of any kind.
-- **`axis-education`** has zero provisioning jobs of any template.
-
-## Things that will bite
-
-* **Both templates must be applied** when anything is added to the artifact
-  listing. It is served by the *client's* runtime, so an agent-only apply
-  leaves the Console showing nothing and looking like the feature failed.
-* **Cloud Tasks reserves a deleted queue name for ~7 days.** Rebuilding an
-  agent inside a week needs a different slug. This is why the agent is `wa2`.
-  Write the slug convention down before a client hits it.
-* **`min_instances = 1` is a correctness requirement, not a knob** (F-027).
-  One always-on instance per artifact per client. Ten clients × five agents is
-  fifty idle instances billed continuously — a pricing question to answer
-  before the tenth agent, not after.
-* **Cancelling a run does not purge its queued deliveries.** Sixteen
-  compensated runs left tasks retrying against a runtime that refuses them.
-* **Meta was blocking the test line** at the end of the session
-  (`API access blocked, code 200`), after the night's volume. Their side.
-  Expect it to clear; if not, check the app's standing in Meta's console.
-* **A correct refusal and a real failure look identical from a trace span**
-  carrying `status: error` and nothing else. The consent refusal knows exactly
-  why it refused and the span does not keep it. That cost an hour of hunting a
-  bug that did not exist, and is a good small thing to improve.
-
-## Before the empty project
-
-In this order, all on `user-test-1`:
-
-1. **F-087**, then publish the second agent for real and confirm both answer
-   their own channels.
-2. A **multi-turn conversation**, an image, two customers overlapping.
-3. Write down the **agent slug convention** and the 7-day queue rule.
-
-Then take the empty GCP project and run a real onboarding end to end. Doing it
-before F-087 means debugging two unknowns at once.
+Full write-ups in `_dev/PRODUCTION_PUSH_AND_TEST.md`.
 
 ## State of the test client
 
-`user-test-1`'s agent is set to **Send automatically** — that is how it was
-verified. Switch it back in the Console (Exigence → Automations → Superharness
-→ Replies) if you would rather it not answer unattended. The test number
-`+6597895638` is currently opted **in**. One run is deliberately left in the
-stranded state as evidence for F-080; it can now be cancelled through the
-Console.
+`user-test-1`, on GCP `testproj-448205`, Exigence and Manifold on.
+
+| artifact | rev | name | triggers |
+| --- | --- | --- | --- |
+| `exigence.reference.summary` | 1 | Reference summary | manual |
+| `exigence.superharness` | 2 | Superharness | manual, conversation (`whatsapp`) |
+| `exigence.superharness.deliveries` | 1 | Superharness | manual |
+| `exigence.superharness.bookings-desk` | 1 | Bookings Desk | manual |
+
+`deliveries` was published from the command line to prove F-087 and carries the
+old shared display name; `bookings-desk` was created from the console. Two
+Cloud Run runtimes exist — the client's own and `exigence.superharness`'s.
+Neither of the two newer agents has one yet.
+
+**Suites:** 986 Exigence · 557 Platform API · 30 provisioner · 507 Console.
+All repos clean and synced. The root state files are not in any git repo.
