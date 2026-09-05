@@ -3172,7 +3172,7 @@ project's own runtime serves.
 **This is F-072's lesson in the control plane.** Deliveries follow the
 artifact; so must the calls that start them.
 
-### F-097 · P0 · Every step of every run conflicted with itself — FIXED, VERIFICATION PENDING
+### F-097 · P0 · Every step of every run conflicted with itself — FIXED
 **Did:** Started the first agent run after F-096.
 **Saw:** `activity identity cannot change`, retried until the ceiling. Nothing
 on the run but a step stuck at `pending`.
@@ -3204,7 +3204,36 @@ later instant, which is a different identity again.
 It affected every deployment carrying the F-080 image, the live WhatsApp agent
 among them. All of `user-test-1`'s runtimes were rolled to the fixed image.
 
-**Not yet verified live:** Cloud Tasks had backed off, so no retry had reached
-the fixed revision at the time of writing. The two stranded runs will not
-recover — an activity created without a bound can never be transitioned by code
-that adds one — and are expected to end at their ceiling.
+**The first fix was not enough, and the error message added alongside it is
+what showed why:** `abandonedAfter absent became "…"`. Carrying the bound
+addressed activities the recorder created; it did nothing for the ones the
+run's *start service* writes, which know nothing about step deadlines. The
+recorder met a pending activity with no bound, computed one, and tried to add
+it.
+
+**The fix that worked is narrower to state and wider in effect.** Every
+transition is now the recorded activity with a new status and nothing else. A
+transition can no longer differ from the record in any field — computed from a
+clock, defaulted, or added later by code that has never met the record. It also
+settles replay: this process did not write the record and cannot reproduce the
+instant that did, so it must not try.
+
+**Verified live.** With the fix deployed, a run created from the console went
+`4 → 27 → succeeded at 41` within a minute:
+
+```
+06:43:48  new=running/4
+06:44:10  new=running/27
+06:44:21  new=succeeded/41
+```
+
+Three decisions, two actions, then the agent stopped on its own — the remaining
+steps skipped, well inside its eight-step ceiling, with per-step cost metered
+(USD 0.000411, 0.000467, 0.00054775). **The run stranded for over an hour
+recovered too**, once its queued task next dispatched: an activity written
+without a bound is now left exactly as it was written, so the runs I expected
+to be unrecoverable were not.
+
+That last part is worth keeping. The prediction that they could not recover was
+wrong because it was made about the *first* fix, which added a bound to those
+activities. The second fix does not, so they resumed where they had stopped.
