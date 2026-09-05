@@ -1,178 +1,139 @@
-# Handoff — 05/09/26, morning
+# Handoff — 05/09/26
 
-Overnight session. The WhatsApp agent works end to end and answers customers by
-itself. Getting there found seven defects, all fixed and deployed except two
-that need a decision from you.
+Overnight session, then a second pass closing the gaps that stood between the
+platform and a real client.
 
-## Where to start
+## Read this first
 
-Read **"Open, and each needs a decision"** below. Everything else is done and
-verified live; those two are the only things waiting on a person.
+**A client can have exactly one agent today.** Everything the routing,
+authority, inventory and secret work was built for is in place and correct.
+One thing stands between it and being usable, it is understood, and it is
+written up as **F-087** below. That is the first thing to do.
 
-## What works now, proven on `user-test-1` rather than in a test
+The operator has an empty GCP project waiting. **Do not use it yet** — see
+"Before the empty project" at the bottom.
 
-A customer's WhatsApp message reaches the agent, runs it, and the agent replies
-without anybody in the console. Verified at 19:01 on 04/09: `channel.send`
-status **ok**, the run **succeeded** at sequence 28 on revision 2, and a
-`manifold_conversations` record carries the exchange.
+## What works, proven live on `user-test-1`
 
-The path, and the thing that was broken at each step:
+A customer's WhatsApp message reaches an agent, runs it, and the agent replies
+unattended. Verified 04/09 at 19:01: `channel.send` **ok**, run **succeeded**
+at sequence 28, `manifold_conversations` carries the exchange.
 
 ```
 Meta → receiver          verifies the signature, finds which agent answers
      → the AGENT's queue routing is the queue, never the task's URL (F-072)
-     → agent runtime     its own service, its own identity, its own queue
+     → agent runtime     its own service, identity, queue and secrets
      → run               authorised because the registry knows the agent (F-076)
      → channel.send      held or automatic, as published (F-077)
 ```
 
-**Live state.** All three Cloud Run services in `testproj-448205` are on the
-current runtime image. Platform API, provisioner and Console are all deployed
-from `main`. Suites: **966** Exigence, **550** Platform API, **27** provisioner,
-**499** Console.
+Consent is enforced for real: a "STOP" from the test number blocked every reply
+until "start" opted back in. Approval gating works in both directions. Refusals
+carry their reasons rather than leaking stack traces.
 
-## Open, and each needs a decision
+**Suites:** 973 Exigence · 552 Platform API · 27 provisioner · 500 Console.
+All repos clean and synced; everything deployed on images carrying every fix
+below.
 
-### 1. ~~A run stranded mid-step cannot be cancelled~~ — DONE 05/09
+## F-087 — the one blocker, and the first job
 
-Built as you asked: the operator override, with the distinction you insisted on.
+Publishing a **second** agent fails with `immutable configuration version
+conflicts`.
 
-"Slow" and "abandoned" are now told apart by **evidence, not a timer**. Cloud
-Run enforces a 900s request deadline on the runtime, so past it the process
-that started an activity is gone by definition. Each attempt records
-`abandonedAfter` when it begins, and one Terraform local drives both the
-service's `timeout` and the value the runtime is told — two copies of that
-number would drift, and the whole point is that the bound is the deployment's
-own.
+Provider, pricing and adapter versions are shared by every agent in a project,
+at fixed coordinates `(kind, projectId, resourceId, version)`. Their *content*
+includes `publishedAt`, the wall clock at publish. So a second agent computes
+byte-identical configuration with a different timestamp, the digest differs,
+and the store correctly refuses — those coordinates already hold different
+content.
 
-Cancellation now answers three different things:
+The refusal is right and so is the invariant: coordinates identify content,
+which is what lets a revision pin a digest and a runtime verify it. What is
+wrong is that `publishedAt` varies for a resource whose identity is supposed to
+*be* its coordinates.
 
-* something may still be working → refused, wait (unchanged);
-* nothing is working, nobody has said so → refused, with the sentence saying
-  what the operator is being asked to decide;
-* the operator said the evidence is not coming → cancelled, with
-  `abandonEvidence` recorded in the durable command beside their reason.
+**Do the second option, not the first:**
 
-In the Console the dialog stops saying "Retry" — which was advice for a
-different situation — and says **"Nothing is working on this run"**, explains
-that a step may already have reached a customer, and offers **"Cancel anyway"**.
-Pressing it is the answer; the first attempt never writes anything off.
+* *Deterministic `publishedAt` for shared versions* — simple, and only helps
+  going forward. An existing client's stored versions keep their old digests,
+  so a new agent still conflicts.
+* **Build the bundle against what is already published.** Read the existing
+  shared versions at those coordinates and have the new revision pin *their*
+  digests rather than newly-computed ones. Correct for existing and new clients
+  both, and what "shared" should have meant all along. It changes
+  `publishArtifactBundle` and the bundle builders.
 
-An activity written before this has no bound and reads as *"cannot tell"*,
-never as abandoned.
+I stopped rather than half-implement it: a botched job there corrupts published
+artifact history.
 
-<details><summary>The original write-up</summary>
-A step that was in flight when its instance was recycled waits for evidence
-that can never arrive. The run cannot proceed and cannot be cancelled, and the
-refusal is correct — the tool may already have put a message on somebody's
-phone, and undoing the run without knowing that would be worse.
-
-The refusal is now legible (409 with its own sentence, not a 502). What is
-missing is a way out. Two honest options:
-* a supervisor that ages in-flight activities out after a bounded wait;
-* an explicit operator override that records the evidence was never coming.
-
-</details>
-
-## Meta is currently blocking the test line
-
-The last sends failed with `Meta refused the message: API access blocked
-(code 200)` — their side, after tonight's message volume on the test app. The
-platform routed, authorised, sent and reported the refusal legibly; the
-successful send at 19:01 is the proof the path works. Expect it to clear on its
-own; if it does not, the WhatsApp app's status in Meta's console is where to
-look.
-
-### 2. ~~Re-applying a client runtime fails on its own database~~ — CLOSED 05/09
-
-Fixed and verified; nothing for you to decide. It was written up as a product
-decision and was not one: the blocking `for_each` iterated a resource instead
-of the variable driving it, so `terraform import` could not evaluate the
-configuration at all. Keyed on the variable, the adopt works — the runner logs
-*"Adopted the existing citadel-manifold database into state"* and the apply
-that failed twice with a 409 now finishes clean.
-
-<details><summary>The original write-up, kept for the reasoning</summary>
-`exigence-runtime` on a client who already has Manifold fails with
-`409 Database already exists`, after having updated everything else. The
-database is created with `deletion_policy = ABANDON` because it holds a
-client's customers' messages, so state and reality drift apart permanently.
-
-Adopting it with `terraform import` is the right idea and currently dies on an
-unrelated `Invalid for_each argument` — `import` evaluates the whole
-configuration and that `for_each` cannot resolve without a plan. The runner now
-prints Terraform's own words instead of a reassuring "nothing to adopt".
-
-Three ways out are in `PRODUCTION_PUSH_AND_TEST.md` under F-082. **Making the
-`for_each` resolvable is the smallest**; the others change what a teardown
-does, which is not a 2am decision.
-
-</details>
-
-## Fixed overnight
+## Fixed since the last handoff
 
 | | |
 |---|---|
-| F-077 | An agent can be published to answer unattended, chosen in the Console rather than the CLI. The choice is declared on the graph **and** expressed in the policy, and the runtime refuses a revision where the two disagree — because a permission missing from a list is indistinguishable from an oversight, on the one decision where an oversight puts unreviewed words on a stranger's phone. |
-| F-078 | An agent's runtime is a resource the inventory shows, with drift observed per agent. It was a second always-on service the client paid for and nobody could see. |
-| F-079 | A settings save cannot silently drop an offering. `ProjectOfferingScope` is freezed with a default on every field, so an omission compiles and deletes what the operator had — which is how Manifold was dropped. |
-| F-080 | A run waiting on in-flight evidence answers 409 with a reason, not 502. |
-| F-081 | The configuration publisher cannot be forgotten. It was optional for one build, the production wiring omitted it, and the console said "the platform rejected these values". Now required: three compiler errors instead of a runtime refusal. |
-| F-083 | A revision published after boot is the one that loads. The runtime cached its configuration for the life of the process, so the new reply setting published correctly and changed nothing. Found by using the feature it broke. |
+| F-080 | A run stranded mid-step can be cancelled. "Slow" and "abandoned" are told apart by **evidence, not a timer** — Cloud Run's 900s deadline, with one Terraform local driving both the service `timeout` and `CITADEL_STEP_DEADLINE_SECONDS`. Cancellation answers three things now: may still be working (wait), nothing is working and nobody has said so (decide), the operator said so (cancelled, recorded). The Console says **"Nothing is working on this run"** and offers **"Cancel anyway"** instead of "Retry". |
+| F-082 | Re-applying a client runtime no longer fails on `409 Database already exists`. It was never the product decision it was written up as: the blocking `for_each` iterated a *resource* instead of the variable driving it, so `terraform import` could not evaluate the config at all. |
+| F-084 | An agent may read the channel secrets it replies through. `manifold = null` correctly says an agent has no line to *receive* on, and silently removed the secrets it needs to *send*. |
+| F-085 | Reaching the step ceiling ends the run instead of stranding it, with a sentence an operator can read. |
+| F-086 | A client *can* have a second agent — the artifact id was a constant, so a second publish would have overwritten the first's history. Blocked in practice by F-087. |
 
-Also: template validation in the suite (every template, `terraform validate`,
-eleven seconds, discovered not listed), the type ramp lifted two points at the
-bottom where dense tables live, and five passages of product prose cut to the
-fact they carried.
+Earlier the same session: F-077 (reply approval, chosen in the Console),
+F-078 (agent runtimes visible and drift-checked), F-079 (a settings save cannot
+drop an offering), F-081 (the configuration publisher cannot be forgotten),
+F-083 (a revision published after boot is the one that loads).
 
-## Things worth knowing before you touch this
+## Still untested, and it matters
+
+Everything above was proven **once, on one client, with one agent, on one test
+number**. That is a demo, not a rollout.
+
+- **Two agents in one project** — blocked on F-087. This is the case the whole
+  multi-artifact effort exists for and the one thing it has never run with.
+- **A genuinely fresh client onboarding.** The bootstrap was re-run on an
+  already-admitted project and reported *"All of them were already granted"*,
+  so the real path never executed.
+- **Anything beyond one message** — no multi-turn conversation, no media, no
+  two customers at once, no concurrency of any kind.
+- **`axis-education`** has zero provisioning jobs of any template.
+
+## Things that will bite
 
 * **Both templates must be applied** when anything is added to the artifact
-  listing. The listing is served by the *client's* runtime, so an agent-only
-  apply leaves the console showing nothing and looking like the feature failed.
-* **Cloud Tasks reserves a deleted queue name for ~7 days.** Tearing down and
-  rebuilding an agent inside a week needs a different slug. This is why the
-  agent is `wa2`.
+  listing. It is served by the *client's* runtime, so an agent-only apply
+  leaves the Console showing nothing and looking like the feature failed.
+* **Cloud Tasks reserves a deleted queue name for ~7 days.** Rebuilding an
+  agent inside a week needs a different slug. This is why the agent is `wa2`.
+  Write the slug convention down before a client hits it.
 * **`min_instances = 1` is a correctness requirement, not a knob** (F-027).
-  A run's kickoff returns before its callback arrives, so scale-to-zero
-  recycles the instance in between and the run fails at step 1.
+  One always-on instance per artifact per client. Ten clients × five agents is
+  fifty idle instances billed continuously — a pricing question to answer
+  before the tenth agent, not after.
 * **Cancelling a run does not purge its queued deliveries.** Sixteen
   compensated runs left tasks retrying against a runtime that refuses them.
-  Worth a purge on compensation.
-* **`test-sandbox`** stays Exigence-blocked until ~09/09/26 on the queue-name
-  reservation. `user-test-1` supersedes it.
+* **Meta was blocking the test line** at the end of the session
+  (`API access blocked, code 200`), after the night's volume. Their side.
+  Expect it to clear; if not, check the app's standing in Meta's console.
+* **A correct refusal and a real failure look identical from a trace span**
+  carrying `status: error` and nothing else. The consent refusal knows exactly
+  why it refused and the span does not keep it. That cost an hour of hunting a
+  bug that did not exist, and is a good small thing to improve.
 
-## Two more found after the first pass, both fixed
+## Before the empty project
 
-* **F-084 — an agent could decide to reply and not be allowed to.**
-  `exigence-agent` passes `manifold = null` to the runtime module, correctly
-  reasoning that an agent has no line of its own to *receive* on. That also
-  removed the channel secret grants it needs to **send**. So the approval gate
-  said yes, the policy said yes, `channel.send` was called — and Secret Manager
-  refused, after everything that reports on authority had already reported
-  success. Now one grant per published secret, resolved server-side.
+In this order, all on `user-test-1`:
 
-* **F-085 — an agent that reaches its ceiling strands its run.** Smaller than
-  it first looked: the looping was a symptom of the send failing and being
-  retried. With sends working the agent answers once and the run succeeds. What
-  remains is that reaching the ceiling throws rather than closing the run, which
-  is worth fixing with F-080's other half.
+1. **F-087**, then publish the second agent for real and confirm both answer
+   their own channels.
+2. A **multi-turn conversation**, an image, two customers overlapping.
+3. Write down the **agent slug convention** and the 7-day queue rule.
 
-## An hour spent on something that was not a bug
-
-Twelve `channel.send` calls failed and the cause was the platform being right:
-the test number was recorded `opted_out` from a "STOP" sent during earlier
-testing. Every reply was refused because the person had asked not to be
-messaged. Sending "start" opted back in and the next question was answered.
-
-Worth knowing because a correct refusal and a real failure look identical from
-a trace span carrying `status: error` and nothing else. The consent refusal
-knows exactly why it refused; the span does not keep it. **If you want one
-small thing to improve, that is a good one.**
+Then take the empty GCP project and run a real onboarding end to end. Doing it
+before F-087 means debugging two unknowns at once.
 
 ## State of the test client
 
-`user-test-1`'s agent is currently set to **Send automatically** — that is how
-it was verified. Switch it back to Hold for approval in the Console (Exigence →
-Automations → Superharness → Replies) if you would rather it not answer while
-you are not watching. The test number `+6597895638` is currently opted **in**.
+`user-test-1`'s agent is set to **Send automatically** — that is how it was
+verified. Switch it back in the Console (Exigence → Automations → Superharness
+→ Replies) if you would rather it not answer unattended. The test number
+`+6597895638` is currently opted **in**. One run is deliberately left in the
+stranded state as evidence for F-080; it can now be cancelled through the
+Console.

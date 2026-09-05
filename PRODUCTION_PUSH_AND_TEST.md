@@ -2848,7 +2848,15 @@ happens next: the refusal throws, the six in-flight activities are never
 resolved, and the run is left in the state F-080 describes, which cannot be
 cancelled either.
 
-**Not fixed, and smaller than it first looked.** The looping was a *symptom*:
+**FIXED 05/09/26.** Reaching the ceiling now ends the run the way any other
+terminal condition does, with a sentence an operator can read: *"This agent
+reached the 6 decisions it was published with and stopped."* The driver treats
+it as termination rather than a fault, so the delivery succeeds and Cloud Tasks
+does not retry a run that is already finished. Confirmed by a test that pins
+both halves — the refusal *and* the run being closed with its reason.
+
+**What it looked like first, which was smaller than it was.** The looping was a
+*symptom*:
 `channel.send` was failing, the agent retried, each retry spent a step, and the
 ceiling was reached. With the send working the same agent answers once and the
 run succeeds at sequence 28 — it does not walk to its ceiling at all.
